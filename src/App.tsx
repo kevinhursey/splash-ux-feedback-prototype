@@ -384,7 +384,7 @@ function App() {
             <div className="mx-auto flex h-fit w-fit flex-col items-center justify-end gap-6 text-center">
               {renderAreaProgress(false, true)}
               <h2 className="mt-2 flex w-full flex-col items-center justify-start text-3xl leading-tight font-normal text-black md:text-[32px]">
-                Select topics to discuss
+                Select one or more topics to discuss
               </h2>
             </div>
 
