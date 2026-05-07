@@ -326,7 +326,7 @@ function App() {
   return (
     <main className="box-border flex h-screen items-center justify-center overflow-hidden bg-[#5564ff] p-4 sm:p-8 md:p-8">
       <section
-        className={`flex h-full w-full max-w-[1470px] flex-col items-center rounded-[20px] bg-white px-5 shadow-2xl sm:px-0 ${
+        className={`flex h-full w-full max-w-[1470px] flex-col items-center rounded-[20px] bg-white px-5 sm:px-0 ${
           step === 'welcome'
             ? 'py-0 justify-start'
             : 'py-8 sm:py-12 justify-center'
