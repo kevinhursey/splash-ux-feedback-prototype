@@ -282,9 +282,7 @@ function App() {
       >
         {!emptyInner &&
           selectedAreaModels.map((area, index) => {
-            const isComplete = index < currentAreaIndex
             const isCurrent = index === currentAreaIndex
-            const isUpcoming = index > currentAreaIndex
 
             return (
               <div key={area.id} className="flex items-start">
@@ -297,39 +295,17 @@ function App() {
                     className={`flex items-center justify-center rounded-full border font-['OneStreamFono'] ${
                       compact ? 'h-9 w-9 text-base' : 'h-9 w-9 text-base'
                     } ${
-                      isComplete
+                      isCurrent
                         ? 'border-black bg-black text-white'
-                        : isCurrent
-                          ? 'border-black bg-white text-black'
-                          : 'border-[#cbd5e1] bg-white text-[#64748b]'
+                        : 'border-transparent bg-[#e8eaed] text-[#6b7280]'
                     }`}
                   >
-                    {isComplete ? (
-                      <svg
-                        className="h-[18px] w-[18px] shrink-0"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        xmlns="http://www.w3.org/2000/svg"
-                        aria-hidden="true"
-                      >
-                        <path
-                          d="M5 12.5L9.5 17L19 7.5"
-                          stroke="currentColor"
-                          strokeWidth="2.5"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </svg>
-                    ) : (
-                      index + 1
-                    )}
+                    {index + 1}
                   </span>
                   <span
                     className={`mt-2 uppercase ${
                       compact ? 'text-xs leading-[1.1rem]' : 'text-xs leading-[1.1rem]'
-                    } ${
-                      isUpcoming ? 'text-[#94a3b8]' : 'text-[#475569]'
-                    }`}
+                    } ${isCurrent ? 'font-medium text-black' : 'text-[#6b7280]'}`}
                     style={{ fontFamily: 'OneStreamFono' }}
                   >
                     {area.title}
@@ -337,9 +313,7 @@ function App() {
                 </div>
                 {index < selectedAreaModels.length - 1 && (
                   <div
-                    className={`${compact ? 'mt-[18px] w-8 sm:w-10' : 'mt-[18px] w-8 sm:w-10'} h-[2px] ${
-                      index < currentAreaIndex ? 'bg-black' : 'bg-[#cbd5e1]'
-                    }`}
+                    className={`${compact ? 'mt-[18px] w-8 sm:w-10' : 'mt-[18px] w-8 sm:w-10'} h-[2px] bg-[#cbd5e1]`}
                   />
                 )}
               </div>
