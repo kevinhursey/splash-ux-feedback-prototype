@@ -285,11 +285,13 @@ function App() {
   }
 
   const handleStandaloneSubmitClick = () => {
+    if (standaloneFeedback.trim().length === 0) return
     if (canContact && email.trim().length === 0) return
     void handleStandaloneSubmit()
   }
 
   const handleStandaloneSubmit = async () => {
+    if (standaloneFeedback.trim().length === 0) return
     setIsSubmitting(true)
     const submission = await submitFeedback({
       selectedAreas: [],
@@ -782,7 +784,7 @@ function App() {
                         htmlFor="standalone-feedback"
                         className="text-balance text-left text-lg font-normal text-black sm:text-xl"
                       >
-                        Additional feedback (optional)
+                        Additional feedback
                       </label>
                       <textarea
                         id="standalone-feedback"
@@ -791,9 +793,10 @@ function App() {
                           setStandaloneFeedback(event.target.value)
                         }
                         rows={5}
+                        required
                         className="mt-3 w-full min-w-0 max-w-full resize-y rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:px-5 sm:py-4"
                         placeholder="Tell us anything that would help us better understand your experience."
-                        aria-label="Additional feedback (optional)"
+                        aria-label="Additional feedback"
                       />
                     </div>
 
@@ -859,6 +862,7 @@ function App() {
                     onClick={handleStandaloneSubmitClick}
                     disabled={
                       isSubmitting ||
+                      standaloneFeedback.trim().length === 0 ||
                       (canContact && email.trim().length === 0)
                     }
                     className={`${buttonBaseClass} w-[152px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
