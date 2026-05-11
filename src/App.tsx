@@ -37,7 +37,7 @@ const AREAS: Area[] = [
       'Faster report creation',
       'Improved report formatting',
       'Easier POV understanding in reports',
-      'Better data visualizations',
+      'Better data visualizations for different user groups',
       'Easier dashboard creation',
       'Easier ad hoc report creation',
       'Other',
@@ -48,11 +48,13 @@ const AREAS: Area[] = [
     title: 'Business Process Flows',
     description: 'Workflows and process management',
     improvements: [
-      'Clearer processes for end users based on roles',
-      'Better visibility into end user status',
-      'More secure processes for different user levels',
+      'Clearer process flows based on user roles',
+      'Easier visibility into process status for end users',
+      'Better handling of different workflow levels',
       'Easier workflow POV management',
-      'Clear distinction between required and optional steps',
+      'Clearer distinction between mandatory and optional workflow steps',
+      'Fewer limitations on file uploads',
+      'Other',
     ],
   },
   {
@@ -61,9 +63,11 @@ const AREAS: Area[] = [
     description: 'Scenario modeling and configuration',
     improvements: [
       'Easier scenario modeling in OneStream',
-      'Easier transition from Excel models to OneStream',
-      'Improved modeling configuration (DCS)',
-      'Faster iteration on scenario models',
+      'Easier Excel and spreadsheet integration for modeling',
+      'Easier configuration of modeling scenarios',
+      'Faster scenario iteration and testing',
+      'Easier consolidation calculations',
+      'Other',
     ],
   },
   {
@@ -71,10 +75,10 @@ const AREAS: Area[] = [
     title: 'Rules and Formulas',
     description: 'Writing and configuring formulas',
     improvements: [
-      'Easier to find where to write rules and formulas',
-      'Easier rule and formula configuration',
-      'Easier creation of rules and formulas',
-      'Better access to support when troubleshooting',
+      'Easier rule and formula creation',
+      'Simpler formula configuration in OneStream',
+      'Easier rule management and maintenance',
+      'Other',
     ],
   },
   {
@@ -83,9 +87,10 @@ const AREAS: Area[] = [
     description: 'Forms and manual data entry',
     improvements: [
       'Easier custom form creation and publishing',
-      'Easier manual data entry setup',
-      'Ability to update relevant data live',
-      'Better connector support for data input',
+      'Simpler manual data entry setup',
+      'Better live updates during data entry',
+      'Easier direct data connections',
+      'Other',
     ],
   },
   {
@@ -93,10 +98,12 @@ const AREAS: Area[] = [
     title: 'System Design',
     description: 'Environment and UI configuration',
     improvements: [
-      'Clearer separation between environments (prod vs dev)',
-      'Better control over branding and color configuration',
+      'Easier management of dev, test, and production environments',
+      'Better balance between system branding and default styling',
       'Light and dark mode support',
-      'Easier dashboard and cube view search',
+      'Easier dashboard and cube search in the navigation pane',
+      'Better visibility into performance issues',
+      'Other',
     ],
   },
   {
@@ -108,16 +115,20 @@ const AREAS: Area[] = [
       'Better AI-assisted documentation support',
       'Centralized compliance documentation',
       'Easier access to configuration help',
-      'Improved in-app help experience',
+      'Improved in-app help and guidance',
+      'Other',
     ],
   },
   {
     id: 'mobile',
-    title: 'Configuration',
+    title: 'Application Configuration',
     description: 'Tools and data setup',
     improvements: [
-      'Clearer guidance on which tools and solutions to use',
+      'Easier discovery of solutions and tools within OneStream',
       'Easier data configuration',
+      'Simpler security setup',
+      'Better metadata management',
+      'Other',
     ],
   },
 ]
@@ -148,7 +159,6 @@ function App() {
   const [additionalFeedback, setAdditionalFeedback] = useState('')
   const [email, setEmail] = useState('')
   const [canContact, setCanContact] = useState(false)
-
   const selectedAreaModels = useMemo(
     () =>
       selectedAreas
@@ -431,7 +441,7 @@ function App() {
               </div>
             </div>
 
-            <div className="flex h-20 min-w-0 shrink-0 w-full self-stretch items-center justify-center gap-3 pt-8 text-left align-bottom sm:gap-3">
+            <div className="flex min-h-20 min-w-0 shrink-0 w-full self-stretch items-center justify-center gap-3 pt-2 text-left align-bottom sm:gap-3 sm:pt-4">
               <button
                 type="button"
                 onClick={() => setStep('welcome')}
