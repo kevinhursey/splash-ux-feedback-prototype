@@ -2,7 +2,13 @@ import { useMemo, useState } from 'react'
 
 import welcomeVisual from './assets/f6a77ee25998cd0c15c2b8a0d6bef7386ffd840a-5235x3490.webp'
 
-type Step = 'welcome' | 'areas' | 'improvements' | 'detail' | 'thank-you'
+type Step =
+  | 'welcome'
+  | 'areas'
+  | 'improvements'
+  | 'detail'
+  | 'catch-all'
+  | 'thank-you'
 
 type Area = {
   id: string
@@ -17,6 +23,9 @@ type FeedbackSubmission = {
   selectedAreas: string[]
   improvementsByArea: Record<string, string[]>
   detailsByArea: Record<string, Record<string, string>>
+  additionalFeedback: string
+  email?: string
+  canContact: boolean
 }
 
 const AREAS: Area[] = [
@@ -128,7 +137,6 @@ function App() {
   const [step, setStep] = useState<Step>('welcome')
   const [selectedAreas, setSelectedAreas] = useState<string[]>([])
   const [currentAreaIndex, setCurrentAreaIndex] = useState(0)
-  const [currentDetailIndex, setCurrentDetailIndex] = useState(0)
   const [improvementsByArea, setImprovementsByArea] = useState<
     Record<string, string[]>
   >({})
@@ -137,6 +145,9 @@ function App() {
   >({})
   const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [additionalFeedback, setAdditionalFeedback] = useState('')
+  const [email, setEmail] = useState('')
+  const [canContact, setCanContact] = useState(false)
 
   const selectedAreaModels = useMemo(
     () =>
@@ -153,9 +164,6 @@ function App() {
 
   const isLastImprovementScreen =
     currentAreaIndex === selectedAreaModels.length - 1
-  const currentDetailImprovement = currentArea
-    ? currentSelections[currentDetailIndex]
-    : undefined
 
   const toggleArea = (areaId: string) => {
     setSelectedAreas((previous) =>
@@ -208,7 +216,6 @@ function App() {
   }
 
   const handleContinueImprovements = () => {
-    setCurrentDetailIndex(0)
     setStep('detail')
   }
 
@@ -219,31 +226,30 @@ function App() {
     }
 
     setCurrentAreaIndex((value) => value - 1)
+    setStep('detail')
   }
 
   const handleContinueDetails = () => {
-    if (currentDetailIndex < currentSelections.length - 1) {
-      setCurrentDetailIndex((value) => value + 1)
-      return
-    }
-
     if (isLastImprovementScreen) {
-      void handleSubmit()
+      setStep('catch-all')
       return
     }
 
     setCurrentAreaIndex((value) => value + 1)
-    setCurrentDetailIndex(0)
     setStep('improvements')
   }
 
   const handleBackDetails = () => {
-    if (currentDetailIndex > 0) {
-      setCurrentDetailIndex((value) => value - 1)
-      return
-    }
-
     setStep('improvements')
+  }
+
+  const handleBackCatchAll = () => {
+    setStep('detail')
+  }
+
+  const handleSubmitClick = () => {
+    if (canContact && email.trim().length === 0) return
+    void handleSubmit()
   }
 
   const handleSubmit = async () => {
@@ -252,6 +258,10 @@ function App() {
       selectedAreas,
       improvementsByArea,
       detailsByArea,
+      additionalFeedback,
+      email:
+        canContact && email.trim().length > 0 ? email.trim() : undefined,
+      canContact,
     })
     setSubmissions((previous) => [submission, ...previous])
     setIsSubmitting(false)
@@ -262,9 +272,11 @@ function App() {
     setStep('welcome')
     setSelectedAreas([])
     setCurrentAreaIndex(0)
-    setCurrentDetailIndex(0)
     setImprovementsByArea({})
     setDetailsByArea({})
+    setAdditionalFeedback('')
+    setEmail('')
+    setCanContact(false)
   }
 
   const buttonBaseClass =
@@ -272,7 +284,7 @@ function App() {
 
   const renderAreaProgress = (compact = false, emptyInner = false) => (
     <div
-      className={`w-full min-w-0 max-w-full overflow-x-hidden ${compact ? 'mb-6' : 'mb-2'} ${
+      className={`${emptyInner ? 'w-full' : 'w-fit'} min-w-0 max-w-full overflow-x-hidden ${compact ? 'mb-6' : 'mb-2'} ${
         emptyInner ? 'h-0 w-full' : ''
       }`}
       style={emptyInner ? { height: '0px' } : undefined}
@@ -280,7 +292,7 @@ function App() {
       <div
         className={`flex max-w-full min-w-0 flex-wrap items-start justify-center ${
           compact ? 'gap-y-4' : 'gap-y-4'
-        } ${emptyInner ? 'h-0' : ''}`}
+        } ${emptyInner ? 'h-0 w-full' : 'w-fit'}`}
       >
         {!emptyInner &&
           selectedAreaModels.map((area, index) => {
@@ -375,7 +387,7 @@ function App() {
         )}
 
         {step === 'areas' && (
-          <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1152px] flex-1 flex-col items-center gap-0 overflow-visible sm:gap-0">
+          <div className="mx-0 flex h-full min-h-0 w-full min-w-0 max-w-[1152px] flex-1 flex-col items-center gap-0 overflow-visible sm:gap-0">
             <div className="mx-auto flex h-[70px] w-full min-w-0 max-w-full shrink-0 flex-col items-center gap-4 text-center sm:gap-4">
               {renderAreaProgress(false, true)}
             </div>
@@ -431,26 +443,28 @@ function App() {
                 type="button"
                 onClick={goToImprovementFlow}
                 disabled={selectedAreas.length === 0}
-                className={`${buttonBaseClass} bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
+                className={`${buttonBaseClass} w-[152px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
               >
-                Continue
+                Next
               </button>
             </div>
           </div>
         )}
 
         {step === 'improvements' && currentArea && (
-          <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1152px] flex-1 flex-col items-center justify-start gap-0 overflow-x-hidden overflow-y-hidden">
-            <div className="mx-auto flex w-full min-w-0 max-w-full shrink-0 flex-col items-center gap-3 text-center sm:gap-4">
+          <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1152px] flex-1 flex-col items-center justify-start gap-0 overflow-visible">
+            <div className="mx-auto flex w-fit min-w-0 max-w-full shrink-0 flex-col items-center gap-3 text-center sm:gap-4">
               {renderAreaProgress()}
             </div>
 
-            <div className="mt-2 flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden px-0 sm:mt-3">
+            <div className="mt-6 flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col items-center justify-start overflow-visible px-0">
               <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-full flex-col items-stretch justify-start">
-              <h2 className="mt-0 w-full min-w-0 max-w-full shrink-0 text-balance text-center text-3xl leading-tight font-normal text-black md:text-[32px]">
-                Select all {currentArea.title.toLowerCase()} topics you&apos;d like to discuss
+              <h2 className="mt-0 flex w-full min-w-0 shrink-0 justify-center whitespace-nowrap text-3xl leading-tight font-normal text-black md:text-[32px]">
+                <span className="shrink-0">
+                  Select all {currentArea.title.toLowerCase()} topics you&apos;d like to discuss
+                </span>
               </h2>
-              <div className="improvements-scroll mt-3 min-h-0 w-full min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] sm:mt-8">
+              <div className="improvements-scroll mx-auto mt-3 min-h-0 w-full min-w-0 max-w-[1152px] flex-1 overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] sm:mt-8">
                 <div className="flex w-full min-w-0 max-w-full flex-col justify-start gap-2 sm:gap-2 md:gap-3">
                 {currentArea.improvements.map((improvement) => {
                   const isSelected = currentSelections.includes(improvement)
@@ -508,41 +522,59 @@ function App() {
                 type="button"
                 onClick={handleContinueImprovements}
                 disabled={currentSelections.length === 0}
-                className={`${buttonBaseClass} bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
+                className={`${buttonBaseClass} w-[152px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
               >
-                Continue
+                Next
               </button>
             </div>
           </div>
         )}
 
-        {step === 'detail' && currentArea && currentDetailImprovement && (
-          <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[768px] flex-1 flex-col items-center justify-start gap-3 overflow-x-hidden overflow-y-hidden sm:gap-4">
-            <div className="w-full min-w-0 shrink-0">{renderAreaProgress(true)}</div>
-            <div className="flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden">
-            <div className="flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-x-hidden overflow-y-hidden rounded-2xl border border-[#d9deef] p-4 sm:p-6 md:p-8">
-              <p className="shrink-0 text-sm uppercase font-['OneStreamFono'] text-[#475569]">
-                {currentArea.title}
-              </p>
-              <h2 className="mt-2 shrink-0 text-balance text-2xl font-normal text-black sm:text-3xl">
-                {currentDetailImprovement}
-              </h2>
-              <textarea
-                id="detail"
-                aria-label="Tell us more (optional)"
-                value={detailsByArea[currentArea.id]?.[currentDetailImprovement] ?? ''}
-                onChange={(event) =>
-                  handleImprovementDetailChange(
-                    currentArea.id,
-                    currentDetailImprovement,
-                    event.target.value,
-                  )
-                }
-                className="mt-4 min-h-[7rem] w-full min-w-0 max-w-full flex-1 resize-none rounded-xl border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-black sm:mt-6 sm:min-h-[8rem] sm:px-5 sm:py-4"
-                placeholder="Tell us more (optional)"
-              />
+        {step === 'detail' && currentArea && currentSelections.length > 0 && (
+          <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1152px] flex-1 flex-col items-center justify-start gap-3 overflow-visible sm:gap-4">
+            <div className="w-fit min-w-0 shrink-0">{renderAreaProgress(true)}</div>
+            <div className="mt-4 flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-visible">
+            <div className="mx-auto flex min-h-0 w-full min-w-0 max-w-[768px] flex-1 flex-col items-center justify-start gap-0 overflow-visible rounded-2xl px-4 py-0 sm:px-6 md:px-0">
+              <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden">
+                <h2 className="mt-0 shrink-0 text-balance text-center text-2xl font-normal text-black sm:text-3xl">
+                  Add details for your {currentArea.title.toLowerCase()} topics
+                </h2>
+                <div className="combined-details-scroll improvements-scroll mt-4 min-h-0 w-full min-w-0 flex-1 space-y-8 overflow-x-hidden overflow-y-auto overscroll-contain pb-2 sm:mt-10">
+                  {currentSelections.map((improvement, topicIndex) => (
+                    <div
+                      key={improvement}
+                      className="flex w-full min-w-0 flex-col"
+                    >
+                      <h3 className="text-balance text-left text-lg font-normal text-black sm:text-xl">
+                        {improvement}
+                      </h3>
+                      <textarea
+                        id={`detail-${currentArea.id}-${topicIndex}`}
+                        aria-label={`Tell us more about ${improvement} (optional)`}
+                        value={
+                          detailsByArea[currentArea.id]?.[improvement] ?? ''
+                        }
+                        onChange={(event) =>
+                          handleImprovementDetailChange(
+                            currentArea.id,
+                            improvement,
+                            event.target.value,
+                          )
+                        }
+                        rows={4}
+                        className={`mt-3 w-full min-w-0 max-w-full resize-y rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:mt-2 sm:px-5 sm:py-4 ${
+                          currentSelections.length === 1
+                            ? 'h-[200px] min-h-[200px]'
+                            : 'h-[60px] min-h-[60px]'
+                        }`}
+                        placeholder="Tell us more (optional)"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
 
-              <div className="mt-4 flex shrink-0 flex-col gap-3 sm:mt-6 sm:flex-row">
+              <div className="mt-4 flex shrink-0 flex-col items-center justify-center gap-3 sm:mt-8 sm:flex-row">
                 <button
                   type="button"
                   onClick={handleBackDetails}
@@ -554,15 +586,11 @@ function App() {
                   type="button"
                   onClick={handleContinueDetails}
                   disabled={isSubmitting}
-                  className={`${buttonBaseClass} w-full bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
+                  className={`${buttonBaseClass} w-[152px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
                 >
-                  {currentDetailIndex < currentSelections.length - 1
-                    ? 'Continue'
-                    : isLastImprovementScreen
-                      ? isSubmitting
-                        ? 'Submitting...'
-                        : 'Submit'
-                      : 'Next Area'}
+                  {isLastImprovementScreen && isSubmitting
+                    ? 'Submitting...'
+                    : 'Next'}
                 </button>
               </div>
             </div>
@@ -570,8 +598,111 @@ function App() {
           </div>
         )}
 
+        {step === 'catch-all' && (
+          <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1152px] flex-1 flex-col items-center justify-start gap-3 overflow-visible sm:gap-4">
+            <div className="mx-auto h-[86px] min-h-[86px] max-h-[86px] w-full min-w-0 max-w-[1152px] shrink-0 overflow-hidden">
+              <div
+                className="invisible pointer-events-none select-none"
+                aria-hidden="true"
+              >
+                {renderAreaProgress(true)}
+              </div>
+            </div>
+
+            <div className="mt-4 flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-visible">
+              <div className="mx-auto flex min-h-0 w-full min-w-0 max-w-[768px] flex-1 flex-col items-center justify-start gap-0 overflow-visible rounded-2xl px-4 py-0 sm:px-6 md:px-0">
+                <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden">
+                  <h2 className="mt-0 shrink-0 text-balance text-center text-2xl font-normal text-black sm:text-3xl">
+                    Anything else you&apos;d like to share?
+                  </h2>
+                  <div className="combined-details-scroll improvements-scroll mt-4 min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-2 sm:mt-10">
+                    <div className="flex w-full min-w-0 flex-col">
+                      <label
+                        htmlFor="additional-feedback"
+                        className="text-balance text-left text-lg font-normal text-black sm:text-xl"
+                      >
+                        Additional feedback (optional)
+                      </label>
+                      <textarea
+                        id="additional-feedback"
+                        value={additionalFeedback}
+                        onChange={(event) =>
+                          setAdditionalFeedback(event.target.value)
+                        }
+                        rows={5}
+                        className="mt-3 w-full min-w-0 max-w-full resize-y rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:px-5 sm:py-4"
+                        placeholder="Share anything else that would help our team better understand your experience."
+                        aria-label="Additional feedback (optional)"
+                      />
+                    </div>
+
+                    <div className="mt-8 flex w-full min-w-0 flex-col gap-6">
+                      <label className="flex cursor-pointer items-start gap-3 text-left">
+                        <input
+                          type="checkbox"
+                          checked={canContact}
+                          onChange={(event) =>
+                            setCanContact(event.target.checked)
+                          }
+                          className="mt-0.5 h-5 w-5 shrink-0 accent-black rounded border-[#cbd5e1] text-black focus:ring-black"
+                          aria-label="Yes, you can contact me"
+                        />
+                        <span className="h-full text-base leading-normal text-black">
+                          Yes, you can contact me
+                        </span>
+                      </label>
+
+                      {canContact && (
+                        <div className="flex w-full min-w-0 flex-col">
+                          <label
+                            htmlFor="catch-all-email"
+                            className="text-balance text-left text-lg font-normal text-black sm:text-xl"
+                          >
+                            Email address
+                          </label>
+                          <input
+                            id="catch-all-email"
+                            type="email"
+                            inputMode="email"
+                            autoComplete="email"
+                            value={email}
+                            onChange={(event) => setEmail(event.target.value)}
+                            placeholder="you@example.com"
+                            className="mt-3 h-12 w-full min-w-0 max-w-full rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:px-5"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex shrink-0 flex-col items-center justify-center gap-3 sm:mt-8 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={handleBackCatchAll}
+                    className={`${buttonBaseClass} w-[152px] shrink-0 border border-black bg-white text-black hover:bg-white hover:border-black/50 hover:text-black/50 focus-visible:outline-black`}
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSubmitClick}
+                    disabled={
+                      isSubmitting ||
+                      (canContact && email.trim().length === 0)
+                    }
+                    className={`${buttonBaseClass} w-[152px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
+                  >
+                    {isSubmitting ? 'Submitting...' : 'Submit'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {step === 'thank-you' && (
-          <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1152px] flex-1 flex-col items-stretch overflow-x-hidden overflow-y-hidden">
+          <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1152px] flex-1 flex-col items-stretch overflow-visible">
             <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col items-center justify-center overflow-x-hidden overflow-y-hidden px-3 py-4 sm:px-4">
             <div className="w-full min-w-0 max-w-[672px] text-center">
               <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-black">
