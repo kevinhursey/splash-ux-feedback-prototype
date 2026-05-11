@@ -384,7 +384,7 @@ function App() {
               <h2 className="mt-0 w-full min-w-0 max-w-full text-balance text-center text-3xl leading-tight font-normal text-black md:text-[32px]">
                 Select one or more topics to discuss
               </h2>
-              <div className="mx-auto mt-8 h-[562px] grid w-full max-w-full auto-rows-min grid-cols-2 grid-rows-[repeat(4,auto)] place-content-center gap-2 sm:gap-3 lg:grid-cols-4 lg:grid-rows-[repeat(2,auto)] [&>button]:min-w-0">
+              <div className="improvements-scroll mx-auto mt-8 h-[562px] grid w-full max-w-full auto-rows-min overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] grid-cols-2 grid-rows-[repeat(4,auto)] place-content-center gap-2 sm:gap-3 lg:grid-cols-4 lg:grid-rows-[repeat(2,auto)] [&>button]:min-w-0">
               {AREAS.map((area) => {
                 const isSelected = selectedAreas.includes(area.id)
 
