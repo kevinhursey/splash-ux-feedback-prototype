@@ -8,6 +8,7 @@ type Step =
   | 'improvements'
   | 'detail'
   | 'catch-all'
+  | 'other-feedback'
   | 'thank-you'
 
 type Area = {
@@ -23,7 +24,10 @@ type FeedbackSubmission = {
   selectedAreas: string[]
   improvementsByArea: Record<string, string[]>
   detailsByArea: Record<string, Record<string, string>>
+  /** Final-step textarea after category-based topic details */
   additionalFeedback: string
+  /** Shortcut flow that skips categories — stored separately from category-based data */
+  standaloneFeedback?: string
   email?: string
   canContact: boolean
 }
@@ -157,6 +161,7 @@ function App() {
   const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [additionalFeedback, setAdditionalFeedback] = useState('')
+  const [standaloneFeedback, setStandaloneFeedback] = useState('')
   const [email, setEmail] = useState('')
   const [canContact, setCanContact] = useState(false)
   const selectedAreaModels = useMemo(
@@ -269,6 +274,29 @@ function App() {
       improvementsByArea,
       detailsByArea,
       additionalFeedback,
+      standaloneFeedback: undefined,
+      email:
+        canContact && email.trim().length > 0 ? email.trim() : undefined,
+      canContact,
+    })
+    setSubmissions((previous) => [submission, ...previous])
+    setIsSubmitting(false)
+    setStep('thank-you')
+  }
+
+  const handleStandaloneSubmitClick = () => {
+    if (canContact && email.trim().length === 0) return
+    void handleStandaloneSubmit()
+  }
+
+  const handleStandaloneSubmit = async () => {
+    setIsSubmitting(true)
+    const submission = await submitFeedback({
+      selectedAreas: [],
+      improvementsByArea: {},
+      detailsByArea: {},
+      additionalFeedback: '',
+      standaloneFeedback: standaloneFeedback.trim(),
       email:
         canContact && email.trim().length > 0 ? email.trim() : undefined,
       canContact,
@@ -285,6 +313,7 @@ function App() {
     setImprovementsByArea({})
     setDetailsByArea({})
     setAdditionalFeedback('')
+    setStandaloneFeedback('')
     setEmail('')
     setCanContact(false)
   }
@@ -402,11 +431,11 @@ function App() {
               {renderAreaProgress(false, true)}
             </div>
 
-            <div className="mt-3 flex h-[632px] min-h-0 w-full min-w-0 max-w-full flex-1 flex-col items-center justify-start overflow-x-hidden overflow-y-hidden">
+            <div className="mt-3 flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col items-center justify-start overflow-x-hidden overflow-y-hidden">
               <h2 className="mt-0 w-full min-w-0 max-w-full text-balance text-center text-3xl leading-tight font-normal text-black md:text-[32px]">
                 Select one or more topics to discuss
               </h2>
-              <div className="improvements-scroll mx-auto mt-8 h-[562px] grid w-full max-w-full auto-rows-min overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] grid-cols-2 grid-rows-[repeat(4,auto)] place-content-center gap-2 sm:gap-3 lg:grid-cols-4 lg:grid-rows-[repeat(2,auto)] [&>button]:min-w-0">
+              <div className="improvements-scroll mx-auto mt-8 min-h-0 flex-1 grid w-full max-w-full auto-rows-min overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] grid-cols-2 grid-rows-[repeat(4,auto)] place-content-center gap-2 sm:gap-3 lg:grid-cols-4 lg:grid-rows-[repeat(2,auto)] [&>button]:min-w-0">
               {AREAS.map((area) => {
                 const isSelected = selectedAreas.includes(area.id)
 
@@ -439,6 +468,16 @@ function App() {
                 )
               })}
               </div>
+            </div>
+
+            <div className="flex w-full shrink-0 justify-center px-2 py-5 sm:py-6">
+              <button
+                type="button"
+                onClick={() => setStep('other-feedback')}
+                className="max-w-full cursor-pointer border-0 bg-transparent px-2 text-center text-sm leading-snug font-normal text-black no-underline hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-black/30 sm:text-base"
+              >
+                Don&apos;t see your topic? Share other feedback
+              </button>
             </div>
 
             <div className="flex min-h-20 min-w-0 shrink-0 w-full self-stretch items-end justify-center gap-3 pt-2 text-left align-bottom sm:gap-3 sm:pt-4">
@@ -662,26 +701,35 @@ function App() {
                         </span>
                       </label>
 
-                      {canContact && (
-                        <div className="flex w-full min-w-0 flex-col">
-                          <label
-                            htmlFor="catch-all-email"
-                            className="text-balance text-left text-lg font-normal text-black sm:text-xl"
-                          >
-                            Email address
-                          </label>
-                          <input
-                            id="catch-all-email"
-                            type="email"
-                            inputMode="email"
-                            autoComplete="email"
-                            value={email}
-                            onChange={(event) => setEmail(event.target.value)}
-                            placeholder="you@example.com"
-                            className="mt-3 h-12 w-full min-w-0 max-w-full rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:px-5"
-                          />
-                        </div>
-                      )}
+                      <div className="flex w-full min-w-0 flex-col">
+                        <label
+                          htmlFor="catch-all-email"
+                          className="text-balance text-left text-lg font-normal text-black sm:text-xl"
+                        >
+                          Email address
+                          {!canContact && (
+                            <span className="font-normal text-black">
+                              {' '}
+                              (optional)
+                            </span>
+                          )}
+                        </label>
+                        <input
+                          id="catch-all-email"
+                          type="email"
+                          inputMode="email"
+                          autoComplete="email"
+                          value={email}
+                          onChange={(event) => setEmail(event.target.value)}
+                          placeholder="you@example.com"
+                          aria-label={
+                            canContact
+                              ? 'Email address'
+                              : 'Email address (optional)'
+                          }
+                          className="mt-3 h-12 w-full min-w-0 max-w-full rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:px-5"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -697,6 +745,118 @@ function App() {
                   <button
                     type="button"
                     onClick={handleSubmitClick}
+                    disabled={
+                      isSubmitting ||
+                      (canContact && email.trim().length === 0)
+                    }
+                    className={`${buttonBaseClass} w-[152px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
+                  >
+                    {isSubmitting ? 'Submitting...' : 'Submit'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === 'other-feedback' && (
+          <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1152px] flex-1 flex-col items-center justify-start gap-3 overflow-visible sm:gap-4">
+            <div className="mx-auto h-[86px] min-h-[86px] max-h-[86px] w-full min-w-0 max-w-[1152px] shrink-0 overflow-hidden">
+              <div
+                className="invisible pointer-events-none select-none"
+                aria-hidden="true"
+              >
+                {renderAreaProgress(true)}
+              </div>
+            </div>
+
+            <div className="mt-4 flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-visible">
+              <div className="mx-auto flex min-h-0 w-full min-w-0 max-w-[768px] flex-1 flex-col items-center justify-start gap-0 overflow-visible rounded-2xl px-4 py-0 sm:px-6 md:px-0">
+                <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden">
+                  <h2 className="mt-0 shrink-0 text-balance text-center text-2xl font-normal text-black sm:text-3xl">
+                    What would you like to share?
+                  </h2>
+                  <div className="combined-details-scroll improvements-scroll mt-4 min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-2 sm:mt-10">
+                    <div className="flex w-full min-w-0 flex-col">
+                      <label
+                        htmlFor="standalone-feedback"
+                        className="text-balance text-left text-lg font-normal text-black sm:text-xl"
+                      >
+                        Additional feedback (optional)
+                      </label>
+                      <textarea
+                        id="standalone-feedback"
+                        value={standaloneFeedback}
+                        onChange={(event) =>
+                          setStandaloneFeedback(event.target.value)
+                        }
+                        rows={5}
+                        className="mt-3 w-full min-w-0 max-w-full resize-y rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:px-5 sm:py-4"
+                        placeholder="Tell us anything that would help us better understand your experience."
+                        aria-label="Additional feedback (optional)"
+                      />
+                    </div>
+
+                    <div className="mt-8 flex w-full min-w-0 flex-col gap-6">
+                      <label className="flex cursor-pointer items-start gap-3 text-left">
+                        <input
+                          type="checkbox"
+                          checked={canContact}
+                          onChange={(event) =>
+                            setCanContact(event.target.checked)
+                          }
+                          className="mt-0.5 h-5 w-5 shrink-0 accent-black rounded border-[#cbd5e1] text-black focus:ring-black"
+                          aria-label="Yes, you can contact me"
+                        />
+                        <span className="h-full text-base leading-normal text-black">
+                          Yes, you can contact me
+                        </span>
+                      </label>
+
+                      <div className="flex w-full min-w-0 flex-col">
+                        <label
+                          htmlFor="standalone-email"
+                          className="text-balance text-left text-lg font-normal text-black sm:text-xl"
+                        >
+                          Email address
+                          {!canContact && (
+                            <span className="font-normal text-black">
+                              {' '}
+                              (optional)
+                            </span>
+                          )}
+                        </label>
+                        <input
+                          id="standalone-email"
+                          type="email"
+                          inputMode="email"
+                          autoComplete="email"
+                          value={email}
+                          onChange={(event) => setEmail(event.target.value)}
+                          placeholder="you@example.com"
+                          aria-label={
+                            canContact
+                              ? 'Email address'
+                              : 'Email address (optional)'
+                          }
+                          className="mt-3 h-12 w-full min-w-0 max-w-full rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:px-5"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 flex shrink-0 flex-col items-center justify-center gap-3 sm:mt-8 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => setStep('areas')}
+                    className={`${buttonBaseClass} w-[152px] shrink-0 border border-black bg-white text-black hover:bg-white hover:border-black/50 hover:text-black/50 focus-visible:outline-black`}
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleStandaloneSubmitClick}
                     disabled={
                       isSubmitting ||
                       (canContact && email.trim().length === 0)
