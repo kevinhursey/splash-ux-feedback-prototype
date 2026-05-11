@@ -681,7 +681,7 @@ function App() {
                           setAdditionalFeedback(event.target.value)
                         }
                         rows={5}
-                        className="mt-3 w-full min-w-0 max-w-full resize-y rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:px-5 sm:py-4"
+                        className="mt-3 w-full min-h-[154px] min-w-0 max-w-full resize-y rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:px-5 sm:py-4"
                         placeholder="Share anything else that would help our team better understand your experience."
                         aria-label="Additional feedback (optional)"
                       />
@@ -794,7 +794,7 @@ function App() {
                         }
                         rows={5}
                         required
-                        className="mt-3 w-full min-w-0 max-w-full resize-y rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:px-5 sm:py-4"
+                        className="mt-3 min-h-[154px] w-full min-w-0 max-w-full resize-y rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:px-5 sm:py-4"
                         placeholder="Tell us anything that would help us better understand your experience."
                         aria-label="Additional feedback"
                       />
