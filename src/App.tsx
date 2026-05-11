@@ -441,7 +441,7 @@ function App() {
               </div>
             </div>
 
-            <div className="flex min-h-20 min-w-0 shrink-0 w-full self-stretch items-center justify-center gap-3 pt-2 text-left align-bottom sm:gap-3 sm:pt-4">
+            <div className="flex min-h-20 min-w-0 shrink-0 w-full self-stretch items-end justify-center gap-3 pt-2 text-left align-bottom sm:gap-3 sm:pt-4">
               <button
                 type="button"
                 onClick={() => setStep('welcome')}
