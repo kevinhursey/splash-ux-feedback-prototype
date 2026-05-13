@@ -80,11 +80,133 @@
   font-display: swap;
 }
 
+html {
+  /* Document scrollbar — grey thumb on white page chrome after welcome */
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: #a3a3a3 transparent;
+}
+
+html::-webkit-scrollbar {
+  width: 10px;
+}
+
+html::-webkit-scrollbar-track {
+  background: transparent;
+  border: none;
+}
+
+html::-webkit-scrollbar-thumb {
+  min-height: 40px;
+  border: none;
+  border-radius: 0;
+  background-color: #a3a3a3;
+  box-shadow: none;
+}
+
+html::-webkit-scrollbar-thumb:hover {
+  background-color: #8a8a8a;
+}
+
+html::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Welcome splash only: blue page, white scrollbar, viewport locked */
+html.welcome-splash {
+  overflow: clip;
+  width: 100%;
+  height: 100dvh;
+  height: 100svh;
+  max-height: 100dvh;
+  max-height: 100svh;
+  overscroll-behavior: none;
+  /* Avoid reserving scrollbar space while overflow is clipped — prevents stray
+     scrollbars / layout drift on short viewports (e.g. 650px-tall devtools). */
+  scrollbar-gutter: unset;
+  scrollbar-color: #ffffff transparent;
+  background-color: #5564ff;
+}
+
+html.welcome-splash::-webkit-scrollbar {
+  width: 10px;
+  background-color: #5564ff;
+}
+
+html.welcome-splash::-webkit-scrollbar-track {
+  background-color: #5564ff;
+}
+
+html.welcome-splash::-webkit-scrollbar-thumb {
+  background-color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.12);
+}
+
+html.welcome-splash::-webkit-scrollbar-thumb:hover {
+  background-color: #e5e5e5;
+}
+
+html.welcome-splash body {
+  overflow: clip;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  /* Lock to one viewport tall so padded `main` always shows blue on all four
+     sides (otherwise min-height alone lets the page grow and hides bottom). */
+  height: 100dvh;
+  height: 100svh;
+  min-height: 100dvh;
+  min-height: 100svh;
+  max-height: 100dvh;
+  max-height: 100svh;
+  width: 100%;
+  max-width: none;
+  background-color: #5564ff;
+}
+
+html.welcome-splash #root {
+  flex: 1 1 0%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+  width: 100%;
+  max-width: none;
+  overflow: hidden;
+  box-sizing: border-box;
+  background-color: #5564ff;
+}
+
+/* While the welcome “card expand” overlay runs — match splash gutter so the
+   white card width doesn’t jump when this class is toggled */
+html.welcome-expand-active {
+  overflow-x: hidden !important;
+  background-color: #ffffff;
+  scrollbar-gutter: auto;
+}
+
+html.welcome-expand-active body {
+  background-color: #ffffff !important;
+  overflow-x: hidden !important;
+}
+
+html.welcome-expand-active #root {
+  background-color: #ffffff;
+}
+
 body {
   margin: 0;
   font-family: "OneStreamSans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* Default matches welcome splash (avoids white flash before React) */
   background: #5564ff;
   color: #0f172a;
+}
+
+body.feedback-flow {
+  background: #ffffff;
 }
 
 #root {
@@ -115,10 +237,31 @@ body {
   }
 }
 
-/* Grey scrollbar, no track border (improvements topic list) */
+@keyframes welcome-hero-fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.welcome-hero-fade-enter {
+  animation: welcome-hero-fade-in 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-hero-fade-enter {
+    animation: none;
+  }
+}
+
+/* White scrollbar, no track border — in-flow panels (page scrollbar is on `html` above) */
 .improvements-scroll {
   scrollbar-width: thin;
-  scrollbar-color: #a3a3a3 transparent;
+  scrollbar-color: #ffffff transparent;
+  scrollbar-gutter: stable;
 }
 
 .improvements-scroll::-webkit-scrollbar {
@@ -132,18 +275,14 @@ body {
 
 .improvements-scroll::-webkit-scrollbar-thumb {
   min-height: 40px;
-  background-color: #a3a3a3;
-  background-clip: content-box;
-  border-top: 24px solid transparent;
-  border-bottom: 24px solid transparent;
-  border-left: 0 solid transparent;
-  border-right: 0 solid transparent;
+  border: none;
   border-radius: 0;
-  box-shadow: none;
+  background-color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.12);
 }
 
 .improvements-scroll::-webkit-scrollbar-thumb:hover {
-  background-color: #8a8a8a;
+  background-color: #e5e5e5;
 }
 
 .improvements-scroll::-webkit-scrollbar-button {

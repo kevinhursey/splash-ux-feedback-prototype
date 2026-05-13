@@ -1,4 +1,11 @@
-import { useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 import welcomeVisual from './assets/f6a77ee25998cd0c15c2b8a0d6bef7386ffd840a-5235x3490.webp'
 
@@ -10,6 +17,52 @@ type Step =
   | 'catch-all'
   | 'other-feedback'
   | 'thank-you'
+
+/** Full-window overlay: generous horizontal bleed; `html.welcome-expand-active` clips overflow */
+function getExpandOverlayViewportPx() {
+  if (typeof window === 'undefined') {
+    return { w: 0, h: 0 }
+  }
+  const vv = window.visualViewport
+  const docEl = document.documentElement
+  const layoutW = Math.max(
+    window.innerWidth,
+    docEl.clientWidth,
+    docEl.getBoundingClientRect().width,
+  )
+  const w = Math.ceil(layoutW + 48)
+  const h = Math.ceil((vv?.height ?? window.innerHeight) + 4)
+  return { w, h }
+}
+
+/** Welcome → areas: white card expands to full viewport (duration, ms) */
+const WELCOME_EXPAND_MS = 600
+
+/** Plain rect snapshot — avoid live DOMRect reads after layout */
+type WelcomeOverlayRect = {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+function welcomeShrinkTargetFromSectionRect(
+  rect: DOMRectReadOnly,
+): WelcomeOverlayRect {
+  const left = rect.left
+  const top = rect.top
+  const width = rect.right - left
+  const height = rect.bottom - top
+  return { left, top, width, height }
+}
+
+/**
+ * Welcome ← flow: measure in one layout effect, then rAF kick in a *separate* effect
+ * so cleanup from `cover → shrink` cannot cancel the scheduled rAF chain (stuck fullscreen).
+ */
+type ShrinkToWelcomeState =
+  | { kind: 'measure' }
+  | { kind: 'anim'; to: WelcomeOverlayRect; cover: boolean }
 
 type Area = {
   id: string
@@ -164,6 +217,191 @@ function App() {
   const [standaloneFeedback, setStandaloneFeedback] = useState('')
   const [email, setEmail] = useState('')
   const [canContact, setCanContact] = useState(false)
+
+  const sectionRef = useRef<HTMLElement | null>(null)
+  const expandingOverlayRef = useRef<HTMLDivElement | null>(null)
+  const reverseWelcomeOverlayRef = useRef<HTMLDivElement | null>(null)
+  const [expandFromWelcome, setExpandFromWelcome] = useState<
+    null | { from: DOMRectReadOnly; expanded: boolean }
+  >(null)
+  const [shrinkToWelcome, setShrinkToWelcome] =
+    useState<ShrinkToWelcomeState | null>(null)
+  /** Remount shrink overlay per reverse run so stuck transitions / stale styles cannot persist */
+  const [welcomeShrinkSession, setWelcomeShrinkSession] = useState(0)
+  /** Bumped when shrink-to-welcome finishes so copy remounts with `page-step-enter` after overlay */
+  const [welcomeCopyEnterNonce, setWelcomeCopyEnterNonce] = useState(0)
+
+  useEffect(() => {
+    const id = 'welcome-hero-preload'
+    if (document.getElementById(id)) return
+    const link = document.createElement('link')
+    link.id = id
+    link.rel = 'preload'
+    link.as = 'image'
+    link.href = welcomeVisual
+    document.head.appendChild(link)
+    return () => {
+      document.getElementById(id)?.remove()
+    }
+  }, [])
+
+  useEffect(() => {
+    const root = document.documentElement
+    const body = document.body
+    if (step === 'welcome') {
+      root.classList.add('welcome-splash')
+      body.classList.add('welcome-splash')
+      body.classList.remove('feedback-flow')
+    } else {
+      root.classList.remove('welcome-splash')
+      body.classList.remove('welcome-splash')
+      body.classList.add('feedback-flow')
+    }
+    return () => {
+      root.classList.remove('welcome-splash')
+      body.classList.remove('welcome-splash')
+      body.classList.remove('feedback-flow')
+    }
+  }, [step])
+
+  useLayoutEffect(() => {
+    if (typeof window === 'undefined') return
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+    document.documentElement.scrollTop = 0
+    document.body.scrollTop = 0
+  }, [step])
+
+  useLayoutEffect(() => {
+    if (!expandFromWelcome || expandFromWelcome.expanded) return
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setExpandFromWelcome((prev) =>
+          prev && !prev.expanded ? { ...prev, expanded: true } : prev,
+        )
+      })
+    })
+    return () => cancelAnimationFrame(id)
+  }, [expandFromWelcome])
+
+  useEffect(() => {
+    if (!expandFromWelcome?.expanded) return
+    const el = expandingOverlayRef.current
+    const done = () => {
+      setStep('areas')
+      setExpandFromWelcome(null)
+    }
+    let finished = false
+    const finish = () => {
+      if (finished) return
+      finished = true
+      done()
+    }
+    if (!el) {
+      finish()
+      return
+    }
+    el.addEventListener('transitionend', finish)
+    const t = window.setTimeout(finish, WELCOME_EXPAND_MS + 100)
+    return () => {
+      el.removeEventListener('transitionend', finish)
+      window.clearTimeout(t)
+    }
+  }, [expandFromWelcome])
+
+  useLayoutEffect(() => {
+    if (step !== 'welcome' || shrinkToWelcome?.kind !== 'measure') return
+    let alive = true
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!alive) return
+        const section = sectionRef.current
+        const rect = section?.getBoundingClientRect()
+        if (!rect || rect.width < 12) {
+          setShrinkToWelcome(null)
+          setWelcomeCopyEnterNonce((n) => n + 1)
+          return
+        }
+        const to = welcomeShrinkTargetFromSectionRect(rect)
+        setShrinkToWelcome({ kind: 'anim', to, cover: true })
+      })
+    })
+    return () => {
+      alive = false
+    }
+  }, [shrinkToWelcome, step])
+
+  useLayoutEffect(() => {
+    if (shrinkToWelcome?.kind !== 'anim' || !shrinkToWelcome.cover) return
+    let alive = true
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!alive) return
+          const section = sectionRef.current
+          const refined = section?.getBoundingClientRect()
+          setShrinkToWelcome((prev) => {
+            if (!prev || prev.kind !== 'anim' || !prev.cover) return prev
+            const to =
+              refined && refined.width >= 12
+                ? welcomeShrinkTargetFromSectionRect(refined)
+                : prev.to
+            return { ...prev, to, cover: false }
+          })
+        })
+      })
+    })
+    return () => {
+      alive = false
+    }
+  }, [shrinkToWelcome])
+
+  useEffect(() => {
+    if (
+      !shrinkToWelcome ||
+      shrinkToWelcome.kind !== 'anim' ||
+      shrinkToWelcome.cover
+    )
+      return
+    const el = reverseWelcomeOverlayRef.current
+    const done = () => {
+      setShrinkToWelcome(null)
+      setWelcomeCopyEnterNonce((n) => n + 1)
+    }
+    let finished = false
+    const finish = () => {
+      if (finished) return
+      finished = true
+      done()
+    }
+    const onTransitionEnd = (e: TransitionEvent) => {
+      if (e.target !== el) return
+      if (e.propertyName !== 'width') return
+      finish()
+    }
+    if (!el) {
+      finish()
+      return
+    }
+    el.addEventListener('transitionend', onTransitionEnd)
+    const t = window.setTimeout(finish, WELCOME_EXPAND_MS + 150)
+    return () => {
+      el.removeEventListener('transitionend', onTransitionEnd)
+      window.clearTimeout(t)
+    }
+  }, [shrinkToWelcome])
+
+  useEffect(() => {
+    const root = document.documentElement
+    if (expandFromWelcome || shrinkToWelcome) {
+      root.classList.add('welcome-expand-active')
+    } else {
+      root.classList.remove('welcome-expand-active')
+    }
+    return () => {
+      root.classList.remove('welcome-expand-active')
+    }
+  }, [expandFromWelcome, shrinkToWelcome])
+
   const selectedAreaModels = useMemo(
     () =>
       selectedAreas
@@ -308,8 +546,41 @@ function App() {
     setStep('thank-you')
   }
 
-  const resetFlow = () => {
+  const handleGetStarted = () => {
+    setShrinkToWelcome(null)
+    if (
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      setStep('areas')
+      return
+    }
+    const el = sectionRef.current
+    const rect = el?.getBoundingClientRect()
+    if (!rect || rect.width < 12) {
+      setStep('areas')
+      return
+    }
+    setExpandFromWelcome({ from: rect, expanded: false })
+  }
+
+  const goBackToWelcome = () => {
+    setExpandFromWelcome(null)
+    if (
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      setStep('welcome')
+      return
+    }
+    setWelcomeShrinkSession((s) => s + 1)
+    setShrinkToWelcome({ kind: 'measure' })
     setStep('welcome')
+  }
+
+  const resetFlow = () => {
+    setExpandFromWelcome(null)
+    setShrinkToWelcome(null)
     setSelectedAreas([])
     setCurrentAreaIndex(0)
     setImprovementsByArea({})
@@ -318,25 +589,43 @@ function App() {
     setStandaloneFeedback('')
     setEmail('')
     setCanContact(false)
+    if (
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      setStep('welcome')
+      return
+    }
+    setWelcomeShrinkSession((s) => s + 1)
+    setShrinkToWelcome({ kind: 'measure' })
+    setStep('welcome')
   }
 
   const buttonBaseClass =
     'inline-flex h-12 items-center justify-center rounded-none px-6 font-["OneStreamFono"] text-xl font-normal uppercase tracking-[0.5px] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2'
 
-  const renderAreaProgress = (compact = false, emptyInner = false) => (
+  /** Shared column so step content stacks the same way as the improvements flow */
+  const stepPrimaryColumnClass =
+    'mx-auto flex w-full min-w-0 max-w-[1152px] flex-col items-center justify-start gap-0 overflow-visible'
+
+  /** Progress row (or placeholder) — same vertical band as the improvements step */
+  const stepProgressBandClass =
+    'flex w-full min-w-0 shrink-0 flex-col items-center justify-start'
+
+  /** Primary headline + body — `mt-6` aligns with other steps; `gap-y` separates headline from content on the topic grid step */
+  const stepHeadlineBandClass =
+    'mt-6 flex w-full min-w-0 max-w-full flex-col items-center justify-start gap-y-4 overflow-visible px-0 sm:gap-y-8 [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:gap-y-2'
+
+  const renderAreaProgress = (compact = false) => (
     <div
-      className={`${emptyInner ? 'w-full' : 'w-fit'} min-w-0 max-w-full overflow-x-hidden ${compact ? 'mb-6' : 'mb-2'} ${
-        emptyInner ? 'h-0 w-full' : ''
-      }`}
-      style={emptyInner ? { height: '0px' } : undefined}
+      className="mb-2 w-fit min-w-0 max-w-full overflow-x-hidden"
     >
       <div
         className={`flex max-w-full min-w-0 flex-wrap items-start justify-center ${
           compact ? 'gap-y-4' : 'gap-y-4'
-        } ${emptyInner ? 'h-0 w-full' : 'w-fit'}`}
+        } w-fit`}
       >
-        {!emptyInner &&
-          selectedAreaModels.map((area, index) => {
+        {selectedAreaModels.map((area, index) => {
             const isCurrent = index === currentAreaIndex
 
             return (
@@ -378,66 +667,178 @@ function App() {
     </div>
   )
 
+  const expandOverlay =
+    expandFromWelcome && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            ref={expandingOverlayRef}
+            aria-hidden
+            className="pointer-events-none fixed z-[9999] box-border bg-white will-change-[left,top,width,height,border-radius]"
+            style={{
+              left: expandFromWelcome.expanded ? -24 : expandFromWelcome.from.left,
+              top: expandFromWelcome.expanded ? 0 : expandFromWelcome.from.top,
+              width: expandFromWelcome.expanded
+                ? `${getExpandOverlayViewportPx().w}px`
+                : `${expandFromWelcome.from.width}px`,
+              height: expandFromWelcome.expanded
+                ? `${getExpandOverlayViewportPx().h}px`
+                : `${expandFromWelcome.from.height}px`,
+              borderRadius: expandFromWelcome.expanded ? 0 : 20,
+              transitionProperty: 'left, top, width, height, border-radius',
+              transitionDuration: `${WELCOME_EXPAND_MS}ms`,
+              transitionTimingFunction: 'cubic-bezier(0.25, 0.85, 0.35, 1)',
+            }}
+          />,
+          document.body,
+        )
+      : null
+
+  const shrinkOverlay =
+    shrinkToWelcome && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            key={`welcome-shrink-${welcomeShrinkSession}`}
+            ref={reverseWelcomeOverlayRef}
+            aria-hidden
+            className="pointer-events-none fixed z-[9999] box-border bg-white will-change-[left,top,width,height,border-radius]"
+            style={
+              shrinkToWelcome.kind === 'measure' ||
+              (shrinkToWelcome.kind === 'anim' && shrinkToWelcome.cover)
+                ? {
+                    left: -24,
+                    top: 0,
+                    width: `${getExpandOverlayViewportPx().w}px`,
+                    height: `${getExpandOverlayViewportPx().h}px`,
+                    borderRadius: 0,
+                    transitionProperty: 'left, top, width, height, border-radius',
+                    transitionDuration: `${WELCOME_EXPAND_MS}ms`,
+                    transitionTimingFunction:
+                      'cubic-bezier(0.25, 0.85, 0.35, 1)',
+                  }
+                : {
+                    left: shrinkToWelcome.to.left,
+                    top: shrinkToWelcome.to.top,
+                    width: `${shrinkToWelcome.to.width}px`,
+                    height: `${shrinkToWelcome.to.height}px`,
+                    borderRadius: 20,
+                    transitionProperty: 'left, top, width, height, border-radius',
+                    transitionDuration: `${WELCOME_EXPAND_MS}ms`,
+                    transitionTimingFunction:
+                      'cubic-bezier(0.25, 0.85, 0.35, 1)',
+                  }
+            }
+          />,
+          document.body,
+        )
+      : null
+
+  const welcomeOverlayBusy =
+    expandFromWelcome != null || shrinkToWelcome != null
+
+  const welcomeCopyPlayStepEnter =
+    step === 'welcome' &&
+    shrinkToWelcome == null &&
+    expandFromWelcome == null
+
   return (
-    <main className="box-border flex h-screen w-full flex-col items-center justify-center overflow-x-hidden overflow-y-hidden bg-[#5564ff] p-4 sm:p-8 md:p-8">
-      <section
-        className={`flex h-[calc(100dvh-2rem)] min-h-0 w-full min-w-0 max-w-[1470px] flex-col items-center overflow-x-hidden overflow-y-hidden rounded-[20px] bg-white px-5 sm:h-[calc(100dvh-4rem)] sm:px-0 md:h-[calc(100dvh-4rem)] ${
+    <>
+      {expandOverlay}
+      {shrinkOverlay}
+      <main
+        className={`box-border flex w-full min-w-0 flex-col ${
+          step === 'welcome' ? 'items-stretch' : 'items-center'
+        } p-6 md:justify-center ${
           step === 'welcome'
-            ? 'py-0 justify-start'
-            : 'py-8 sm:py-12 justify-start'
+            ? 'h-full min-h-0 max-h-full flex-1 justify-center overflow-x-clip overflow-y-hidden bg-[#5564ff]'
+            : 'min-h-screen justify-start overflow-x-hidden bg-white'
+        }`}
+      >
+      <section
+        ref={sectionRef}
+        className={`mx-auto flex w-full min-w-0 max-w-[1470px] flex-col items-center overflow-x-hidden rounded-[20px] bg-white px-5 sm:px-0 justify-start ${
+          step === 'welcome'
+            ? 'min-h-0 w-full max-h-[min(100%,calc(100svh-3rem))] overflow-hidden py-0'
+            : 'min-h-[calc(100dvh-3rem)] py-6'
         }`}
         style={{ width: '100%' }}
       >
         <div
-          className="flex h-full min-h-0 w-full min-w-0 max-w-full flex-1 flex-col items-center self-stretch overflow-visible"
+          className={`flex w-full min-w-0 max-w-full flex-col items-center self-stretch overflow-visible ${
+            step === 'welcome'
+              ? 'min-h-0 max-h-full'
+              : 'grow min-h-0 max-w-full'
+          }`}
         >
           <div
             key={step}
-            className="page-step-enter flex h-full min-h-0 w-full min-w-0 max-w-full flex-1 flex-col items-center overflow-visible"
+            className={`${
+              step === 'welcome' ? '' : 'page-step-enter '
+            }flex w-full min-w-0 max-w-full flex-col items-center justify-between gap-0 overflow-visible ${
+              step === 'welcome' ? 'min-h-0 max-h-full' : 'grow min-h-0'
+            }`}
           >
         {step === 'welcome' && (
-          <div className="grid min-h-0 h-full w-full min-w-0 max-w-full flex-1 grid-cols-1 items-stretch self-stretch overflow-x-hidden overflow-y-auto p-0 lg:grid-cols-[1.25fr_1fr] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden">
-            <div className="mx-auto flex min-h-0 w-full min-w-0 max-w-full flex-col items-start justify-center gap-6 px-6 py-8 sm:gap-8 sm:px-10 sm:py-10 lg:h-full lg:min-h-0 lg:gap-8 lg:px-14 lg:py-12">
-              <div className="w-full min-w-0 space-y-6">
-                <h1 className="text-balance text-4xl leading-tight font-normal text-black md:text-5xl lg:text-[64px]">
+          <div className="grid min-h-0 w-full min-w-0 max-w-full grid-cols-1 items-stretch self-stretch overflow-x-hidden p-0 lg:min-h-0 lg:max-h-full lg:grid-cols-[1.25fr_1fr] lg:grid-rows-1 lg:overflow-hidden">
+            <div
+              key={`welcome-copy-${welcomeCopyEnterNonce}`}
+              className={`${
+                welcomeCopyPlayStepEnter ? 'page-step-enter ' : ''
+              }mx-auto flex h-full min-h-0 w-full min-w-0 max-w-full flex-col items-start justify-start gap-6 px-6 py-8 sm:gap-8 sm:px-10 sm:py-10 [@media(max-height:720px)_and_(max-width:1023px)]:gap-4 [@media(max-height:720px)_and_(max-width:1023px)]:py-6 lg:justify-center lg:gap-8 lg:px-14 lg:py-12 [@media(min-width:1024px)_and_(max-height:720px)]:lg:gap-6 [@media(min-width:1024px)_and_(max-height:720px)]:lg:px-11 [@media(min-width:1024px)_and_(max-height:720px)]:lg:py-9`}
+            >
+              <div className="w-full min-w-0 space-y-6 [@media(min-width:1024px)_and_(max-height:720px)]:space-y-5">
+                <h1 className="text-balance text-4xl leading-tight font-normal text-black md:text-5xl lg:text-[64px] [@media(min-width:1024px)_and_(max-height:720px)]:lg:text-[56px] [@media(min-width:1024px)_and_(max-height:720px)]:lg:leading-[1.08]">
                   Share Feedback to Improve OneStream
                 </h1>
-                <p className="max-w-[620px] text-lg leading-[1.4] text-black md:text-xl">
+                <p className="max-w-[620px] text-lg leading-[1.4] text-black md:text-xl [@media(min-width:1024px)_and_(max-height:720px)]:lg:text-[1.0625rem] [@media(min-width:1024px)_and_(max-height:720px)]:lg:leading-snug">
                   You can help us understand what matters most to you.
                 </p>
               </div>
               <div>
                 <button
                   type="button"
-                  onClick={() => setStep('areas')}
-                  className={`${buttonBaseClass} bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black`}
+                  onClick={handleGetStarted}
+                  disabled={welcomeOverlayBusy}
+                  className={`${buttonBaseClass} bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60 [@media(min-width:1024px)_and_(max-height:720px)]:h-11 [@media(min-width:1024px)_and_(max-height:720px)]:px-5 [@media(min-width:1024px)_and_(max-height:720px)]:text-lg`}
                 >
                   GET STARTED
                 </button>
               </div>
             </div>
-            <div className="relative hidden min-h-0 w-full self-stretch overflow-hidden rounded-tr-[20px] rounded-br-[20px] bg-[#f8f9ff] p-0 lg:block lg:h-full">
+            <div
+              key={`welcome-hero-${welcomeCopyEnterNonce}`}
+              className={
+                `relative hidden min-h-0 w-full self-stretch overflow-hidden rounded-tr-[20px] rounded-br-[20px] bg-[#f8f9ff] p-0 lg:block lg:h-full lg:min-h-[min(40dvh,560px)] [@media(min-width:1024px)_and_(max-height:720px)]:lg:min-h-0` +
+                (welcomeCopyPlayStepEnter ? ' welcome-hero-fade-enter' : '')
+              }
+            >
               <img
                 src={welcomeVisual}
                 alt=""
+                width={5235}
+                height={3490}
+                sizes="(min-width: 1024px) 45vw, 0px"
                 className="block h-full w-full rounded-none object-cover object-center"
-                decoding="async"
+                decoding="sync"
+                fetchPriority="high"
               />
             </div>
           </div>
         )}
 
         {step === 'areas' && (
-          <div className="mx-0 flex h-full min-h-0 w-full min-w-0 max-w-[1152px] flex-1 flex-col items-center gap-0 overflow-visible sm:gap-0">
-            <div className="mx-auto flex h-[70px] w-full min-w-0 max-w-full shrink-0 flex-col items-center gap-4 text-center sm:gap-4">
-              {renderAreaProgress(false, true)}
-            </div>
-
-            <div className="mt-3 flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col items-center justify-start overflow-x-hidden overflow-y-hidden">
-              <h2 className="mt-0 w-full min-w-0 max-w-full text-balance text-center text-3xl leading-tight font-normal text-black md:text-[32px]">
+          <>
+          <div className="mx-0 flex h-full w-full min-w-0 max-w-[1152px] min-h-0 flex-col items-center justify-between gap-4 overflow-visible sm:gap-6 lg:gap-8">
+            <div className="flex h-fit min-h-0 w-full min-w-0 max-w-full flex-col items-center justify-start overflow-x-hidden">
+              <div className={stepPrimaryColumnClass}>
+                <div
+                  className={`${stepProgressBandClass} min-h-[66px]`}
+                  aria-hidden="true"
+                />
+                <div className={stepHeadlineBandClass}>
+              <h2 className="mt-0 w-full min-w-0 max-w-full shrink-0 text-balance text-center text-3xl leading-tight font-normal text-black md:text-[32px] [@media(max-height:720px)_and_(max-width:1023px)]:text-2xl [@media(max-height:720px)_and_(max-width:1023px)]:md:text-[28px]">
                 Select one or more topics to discuss
               </h2>
-              <div className="improvements-scroll mx-auto mt-8 min-h-0 flex-1 grid w-full max-w-full auto-rows-min overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] grid-cols-2 grid-rows-[repeat(4,auto)] place-content-center gap-2 sm:gap-3 lg:grid-cols-4 lg:grid-rows-[repeat(2,auto)] [&>button]:min-w-0">
+              <div className="mx-auto grid w-full max-w-full auto-rows-min grid-cols-2 grid-rows-[repeat(4,auto)] content-start gap-2 overflow-x-hidden py-2 sm:gap-3 sm:py-3 [@media(max-height:720px)_and_(max-width:1023px)]:gap-2 [@media(max-height:720px)_and_(max-width:1023px)]:py-1 lg:grid-cols-4 lg:grid-rows-[repeat(2,auto)] lg:gap-4 lg:py-4 [&>button]:min-w-0">
               {AREAS.map((area) => {
                 const isSelected = selectedAreas.includes(area.id)
 
@@ -470,9 +871,11 @@ function App() {
                 )
               })}
               </div>
+                </div>
+              </div>
             </div>
 
-            <div className="flex w-full shrink-0 justify-center px-2 py-5 sm:py-6">
+            <div className="flex w-full shrink-0 justify-center px-2 py-0">
               <button
                 type="button"
                 onClick={() => setStep('other-feedback')}
@@ -481,41 +884,43 @@ function App() {
                 Don&apos;t see your topic? Share other feedback
               </button>
             </div>
-
-            <div className="flex min-h-20 min-w-0 shrink-0 w-full self-stretch items-end justify-center gap-3 pt-2 text-left align-bottom sm:gap-3 sm:pt-4">
-              <button
-                type="button"
-                onClick={() => setStep('welcome')}
-                className={`${buttonBaseClass} w-[152px] border border-black bg-white text-black hover:bg-white hover:border-black/50 hover:text-black/50 focus-visible:outline-black`}
-              >
-                Back
-              </button>
-              <button
-                type="button"
-                onClick={goToImprovementFlow}
-                disabled={selectedAreas.length === 0}
-                className={`${buttonBaseClass} w-[152px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
-              >
-                Next
-              </button>
-            </div>
           </div>
+
+          <div className="flex min-h-20 min-w-0 shrink-0 w-full self-stretch items-end justify-center gap-3 pt-4 text-left align-bottom sm:gap-3 sm:pt-6 [@media(max-height:720px)_and_(max-width:1023px)]:min-h-16 [@media(max-height:720px)_and_(max-width:1023px)]:pt-2">
+            <button
+              type="button"
+              onClick={goBackToWelcome}
+              disabled={welcomeOverlayBusy}
+              className={`${buttonBaseClass} w-[152px] border border-black bg-white text-black hover:bg-white hover:border-black/50 hover:text-black/50 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              onClick={goToImprovementFlow}
+              disabled={selectedAreas.length === 0}
+              className={`${buttonBaseClass} w-[152px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
+            >
+              Next
+            </button>
+          </div>
+          </>
         )}
 
         {step === 'improvements' && currentArea && (
-          <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1152px] flex-1 flex-col items-center justify-start gap-0 overflow-visible">
-            <div className="mx-auto flex w-fit min-w-0 max-w-full shrink-0 flex-col items-center gap-3 text-center sm:gap-4">
+          <div className={stepPrimaryColumnClass}>
+            <div className={stepProgressBandClass}>
               {renderAreaProgress()}
             </div>
 
-            <div className="mt-6 flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col items-center justify-start overflow-visible px-0">
-              <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-full flex-col items-stretch justify-start">
-              <h2 className="mt-0 flex w-full min-w-0 shrink-0 justify-center whitespace-nowrap text-3xl leading-tight font-normal text-black md:text-[32px]">
+            <div className={stepHeadlineBandClass}>
+              <div className="mx-auto flex w-full min-w-0 max-w-full flex-col items-stretch justify-start">
+              <h2 className="mt-0 flex w-full min-w-0 shrink-0 justify-center whitespace-nowrap text-3xl leading-tight font-normal text-black md:text-[32px] [@media(max-height:720px)_and_(max-width:1023px)]:text-2xl [@media(max-height:720px)_and_(max-width:1023px)]:md:text-[28px]">
                 <span className="shrink-0">
                   Select all {currentArea.title.toLowerCase()} topics you&apos;d like to discuss
                 </span>
               </h2>
-              <div className="improvements-scroll mx-auto mt-3 min-h-0 w-full min-w-0 max-w-[1152px] flex-1 overflow-x-hidden overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] sm:mt-8">
+              <div className="mx-auto mt-3 w-full min-w-0 max-w-[1152px] overflow-x-hidden sm:mt-8 [@media(max-height:720px)_and_(max-width:1023px)]:mt-2">
                 <div className="flex w-full min-w-0 max-w-full flex-col justify-start gap-2 sm:gap-2 md:gap-3">
                 {currentArea.improvements.map((improvement) => {
                   const isSelected = currentSelections.includes(improvement)
@@ -561,7 +966,7 @@ function App() {
               </div>
             </div>
 
-            <div className="flex w-full min-w-0 max-w-full shrink-0 justify-center gap-3 pt-8 sm:pt-8">
+            <div className="flex w-full min-w-0 max-w-full shrink-0 justify-center gap-3 pt-8 sm:pt-8 [@media(max-height:720px)_and_(max-width:1023px)]:pt-4">
               <button
                 type="button"
                 onClick={handleBackImprovements}
@@ -582,15 +987,17 @@ function App() {
         )}
 
         {step === 'detail' && currentArea && currentSelections.length > 0 && (
-          <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1152px] flex-1 flex-col items-center justify-start gap-3 overflow-visible sm:gap-4">
-            <div className="w-fit min-w-0 shrink-0">{renderAreaProgress(true)}</div>
-            <div className="mt-4 flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-visible">
-            <div className="mx-auto flex min-h-0 w-full min-w-0 max-w-[768px] flex-1 flex-col items-center justify-start gap-0 overflow-visible rounded-2xl px-4 py-0 sm:px-6 md:px-0">
-              <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden">
-                <h2 className="mt-0 shrink-0 text-balance text-center text-2xl font-normal text-black sm:text-3xl">
+          <div className={stepPrimaryColumnClass}>
+            <div className={stepProgressBandClass}>
+              {renderAreaProgress(true)}
+            </div>
+            <div className={stepHeadlineBandClass}>
+            <div className="mx-auto flex w-full min-w-0 max-w-[768px] flex-col items-center justify-start gap-0 overflow-visible rounded-2xl px-4 py-0 sm:px-6 md:px-0">
+              <div className="flex w-full min-w-0 flex-col overflow-x-hidden">
+                <h2 className="mt-0 shrink-0 text-balance text-center text-2xl font-normal text-black sm:text-3xl [@media(max-height:720px)_and_(max-width:1023px)]:text-xl [@media(max-height:720px)_and_(max-width:1023px)]:sm:text-2xl">
                   Add details for your {currentArea.title.toLowerCase()} topics
                 </h2>
-                <div className="combined-details-scroll improvements-scroll mt-4 min-h-0 w-full min-w-0 flex-1 space-y-8 overflow-x-hidden overflow-y-auto overscroll-contain pb-2 sm:mt-10">
+                <div className="combined-details-scroll improvements-scroll mt-4 w-full min-w-0 space-y-8 overflow-x-hidden pb-2 sm:mt-10 [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:space-y-6 [@media(max-height:720px)_and_(max-width:1023px)]:sm:mt-6">
                   {currentSelections.map((improvement, topicIndex) => (
                     <div
                       key={improvement}
@@ -625,7 +1032,7 @@ function App() {
                 </div>
               </div>
 
-              <div className="mt-4 flex shrink-0 flex-col items-center justify-center gap-3 sm:mt-8 sm:flex-row">
+              <div className="mt-4 flex shrink-0 flex-col items-center justify-center gap-3 sm:mt-8 sm:flex-row [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:sm:mt-4">
                 <button
                   type="button"
                   onClick={handleBackDetails}
@@ -650,8 +1057,8 @@ function App() {
         )}
 
         {step === 'catch-all' && (
-          <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1152px] flex-1 flex-col items-center justify-start gap-3 overflow-visible sm:gap-4">
-            <div className="mx-auto h-[86px] min-h-[86px] max-h-[86px] w-full min-w-0 max-w-[1152px] shrink-0 overflow-hidden">
+          <div className={stepPrimaryColumnClass}>
+            <div className={stepProgressBandClass}>
               <div
                 className="invisible pointer-events-none select-none"
                 aria-hidden="true"
@@ -660,13 +1067,13 @@ function App() {
               </div>
             </div>
 
-            <div className="mt-4 flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-visible">
-              <div className="mx-auto flex min-h-0 w-full min-w-0 max-w-[768px] flex-1 flex-col items-center justify-start gap-0 overflow-visible rounded-2xl px-4 py-0 sm:px-6 md:px-0">
-                <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden">
-                  <h2 className="mt-0 shrink-0 text-balance text-center text-2xl font-normal text-black sm:text-3xl">
+            <div className={stepHeadlineBandClass}>
+              <div className="mx-auto flex w-full min-w-0 max-w-[768px] flex-col items-center justify-start gap-0 overflow-visible rounded-2xl px-4 py-0 sm:px-6 md:px-0">
+                <div className="flex w-full min-w-0 flex-col overflow-x-hidden">
+                  <h2 className="mt-0 shrink-0 text-balance text-center text-2xl font-normal text-black sm:text-3xl [@media(max-height:720px)_and_(max-width:1023px)]:text-xl [@media(max-height:720px)_and_(max-width:1023px)]:sm:text-2xl">
                     Anything else you&apos;d like to share?
                   </h2>
-                  <div className="combined-details-scroll improvements-scroll mt-4 min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-2 sm:mt-10">
+                  <div className="combined-details-scroll improvements-scroll mt-4 w-full min-w-0 overflow-x-hidden pb-2 sm:mt-10 [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:sm:mt-6">
                     <div className="flex w-full min-w-0 flex-col">
                       <label
                         htmlFor="additional-feedback"
@@ -687,7 +1094,7 @@ function App() {
                       />
                     </div>
 
-                    <div className="mt-8 flex w-full min-w-0 flex-col gap-6">
+                    <div className="mt-8 flex w-full min-w-0 flex-col gap-6 [@media(max-height:720px)_and_(max-width:1023px)]:mt-5 [@media(max-height:720px)_and_(max-width:1023px)]:gap-4">
                       <label className="flex cursor-pointer items-start gap-3 text-left">
                         <input
                           type="checkbox"
@@ -736,7 +1143,7 @@ function App() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex shrink-0 flex-col items-center justify-center gap-3 sm:mt-8 sm:flex-row">
+                <div className="mt-4 flex shrink-0 flex-col items-center justify-center gap-3 sm:mt-8 sm:flex-row [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:sm:mt-4">
                   <button
                     type="button"
                     onClick={handleBackCatchAll}
@@ -762,8 +1169,8 @@ function App() {
         )}
 
         {step === 'other-feedback' && (
-          <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1152px] flex-1 flex-col items-center justify-start gap-3 overflow-visible sm:gap-4">
-            <div className="mx-auto h-[86px] min-h-[86px] max-h-[86px] w-full min-w-0 max-w-[1152px] shrink-0 overflow-hidden">
+          <div className={stepPrimaryColumnClass}>
+            <div className={stepProgressBandClass}>
               <div
                 className="invisible pointer-events-none select-none"
                 aria-hidden="true"
@@ -772,13 +1179,13 @@ function App() {
               </div>
             </div>
 
-            <div className="mt-4 flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-visible">
-              <div className="mx-auto flex min-h-0 w-full min-w-0 max-w-[768px] flex-1 flex-col items-center justify-start gap-0 overflow-visible rounded-2xl px-4 py-0 sm:px-6 md:px-0">
-                <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-hidden">
-                  <h2 className="mt-0 shrink-0 text-balance text-center text-2xl font-normal text-black sm:text-3xl">
+            <div className={stepHeadlineBandClass}>
+              <div className="mx-auto flex w-full min-w-0 max-w-[768px] flex-col items-center justify-start gap-0 overflow-visible rounded-2xl px-4 py-0 sm:px-6 md:px-0">
+                <div className="flex w-full min-w-0 flex-col overflow-x-hidden">
+                  <h2 className="mt-0 shrink-0 text-balance text-center text-2xl font-normal text-black sm:text-3xl [@media(max-height:720px)_and_(max-width:1023px)]:text-xl [@media(max-height:720px)_and_(max-width:1023px)]:sm:text-2xl">
                     What would you like to share?
                   </h2>
-                  <div className="combined-details-scroll improvements-scroll mt-4 min-h-0 w-full min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pb-2 sm:mt-10">
+                  <div className="combined-details-scroll improvements-scroll mt-4 w-full min-w-0 overflow-x-hidden pb-2 sm:mt-10 [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:sm:mt-6">
                     <div className="flex w-full min-w-0 flex-col">
                       <label
                         htmlFor="standalone-feedback"
@@ -800,7 +1207,7 @@ function App() {
                       />
                     </div>
 
-                    <div className="mt-8 flex w-full min-w-0 flex-col gap-6">
+                    <div className="mt-8 flex w-full min-w-0 flex-col gap-6 [@media(max-height:720px)_and_(max-width:1023px)]:mt-5 [@media(max-height:720px)_and_(max-width:1023px)]:gap-4">
                       <label className="flex cursor-pointer items-start gap-3 text-left">
                         <input
                           type="checkbox"
@@ -849,7 +1256,7 @@ function App() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex shrink-0 flex-col items-center justify-center gap-3 sm:mt-8 sm:flex-row">
+                <div className="mt-4 flex shrink-0 flex-col items-center justify-center gap-3 sm:mt-8 sm:flex-row [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:sm:mt-4">
                   <button
                     type="button"
                     onClick={() => setStep('areas')}
@@ -876,12 +1283,11 @@ function App() {
         )}
 
         {step === 'thank-you' && (
-          <div className="mx-auto flex h-full min-h-0 w-full min-w-0 max-w-[1152px] flex-1 flex-col items-stretch overflow-visible">
-            <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col items-center justify-center overflow-x-hidden overflow-y-hidden px-3 py-4 sm:px-4">
-            <div className="w-full min-w-0 max-w-[672px] text-center">
-              <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-black">
+          <div className={stepPrimaryColumnClass}>
+            <div className={`${stepProgressBandClass} justify-center`}>
+              <div className="mx-auto flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-black">
                 <svg
-                  className="h-12 w-12 text-white"
+                  className="h-8 w-8 text-white"
                   viewBox="0 0 24 24"
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
@@ -896,7 +1302,10 @@ function App() {
                   />
                 </svg>
               </div>
-              <h2 className="mt-6 text-balance text-4xl font-normal text-black sm:text-5xl">Thank You</h2>
+            </div>
+            <div className={stepHeadlineBandClass}>
+              <div className="w-full min-w-0 max-w-[672px] px-3 text-center sm:px-4">
+              <h2 className="mt-0 text-balance text-4xl font-normal text-black sm:text-5xl">Thank You</h2>
               <p className="mt-4 text-balance text-lg text-[#1e293b] sm:text-xl">
                 We&apos;ve heard your voice, and it will help us plan for the
                 future.
@@ -904,7 +1313,8 @@ function App() {
               <button
                 type="button"
                 onClick={resetFlow}
-                className={`${buttonBaseClass} mx-auto mt-8 w-full max-w-[387px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black`}
+                disabled={welcomeOverlayBusy}
+                className={`${buttonBaseClass} mx-auto mt-8 w-full max-w-[387px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60`}
               >
                 RETURN TO START
               </button>
@@ -919,6 +1329,7 @@ function App() {
         </div>
       </section>
     </main>
+    </>
   )
 }
 
