@@ -773,7 +773,9 @@ function App() {
             key={step}
             className={`${
               step === 'welcome' ? '' : 'page-step-enter '
-            }flex w-full min-w-0 max-w-full flex-col items-center justify-between gap-0 overflow-visible ${
+            }flex w-full min-w-0 max-w-full flex-col items-center ${
+              step === 'thank-you' ? 'justify-center' : 'justify-between'
+            } gap-0 overflow-visible ${
               step === 'welcome' ? 'min-h-0 max-h-full' : 'grow min-h-0'
             }`}
           >
