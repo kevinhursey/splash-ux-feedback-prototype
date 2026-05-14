@@ -15,7 +15,6 @@ type Step =
   | 'improvements'
   | 'detail'
   | 'catch-all'
-  | 'other-feedback'
   | 'thank-you'
 
 /** Full-window overlay: generous horizontal bleed; `html.welcome-expand-active` clips overflow */
@@ -37,6 +36,9 @@ function getExpandOverlayViewportPx() {
 
 /** Welcome → areas: white card expands to full viewport (duration, ms) */
 const WELCOME_EXPAND_MS = 600
+
+/** Max improvement rows a user can pick on each area’s checklist step */
+const MAX_TOPICS_PER_AREA = 3
 
 /** Plain rect snapshot — avoid live DOMRect reads after layout */
 type WelcomeOverlayRect = {
@@ -69,6 +71,10 @@ type Area = {
   title: string
   description: string
   improvements: string[]
+  /** When set, used on the improvements step instead of the default “Select all …” line */
+  improvementsStepHeading?: string
+  /** When set, used on the detail step instead of “Add details for your … topics” */
+  detailsStepHeading?: string
 }
 
 type FeedbackSubmission = {
@@ -79,7 +85,7 @@ type FeedbackSubmission = {
   detailsByArea: Record<string, Record<string, string>>
   /** Final-step textarea after category-based topic details */
   additionalFeedback: string
-  /** Shortcut flow that skips categories — stored separately from category-based data */
+  /** Reserved for integrations; main UI routes all feedback through areas */
   standaloneFeedback?: string
   email?: string
   canContact: boolean
@@ -188,6 +194,21 @@ const AREAS: Area[] = [
       'Other',
     ],
   },
+  {
+    id: 'other',
+    title: 'Other',
+    description: 'Topics not captured above',
+    improvementsStepHeading:
+      'Choose the themes that best match what you want to share',
+    detailsStepHeading: 'Add details for the themes you selected',
+    improvements: [
+      'Different workflow or use case',
+      'Product direction or strategy',
+      'Integration or ecosystem',
+      'Performance or reliability',
+      'Other',
+    ],
+  },
 ]
 
 async function submitFeedback(
@@ -214,7 +235,6 @@ function App() {
   const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [additionalFeedback, setAdditionalFeedback] = useState('')
-  const [standaloneFeedback, setStandaloneFeedback] = useState('')
   const [email, setEmail] = useState('')
   const [canContact, setCanContact] = useState(false)
 
@@ -429,11 +449,16 @@ function App() {
   const toggleImprovement = (areaId: string, improvement: string) => {
     setImprovementsByArea((previous) => {
       const selected = previous[areaId] ?? []
-      const nextValues = selected.includes(improvement)
-        ? selected.filter((item) => item !== improvement)
-        : [...selected, improvement]
-
-      return { ...previous, [areaId]: nextValues }
+      if (selected.includes(improvement)) {
+        return {
+          ...previous,
+          [areaId]: selected.filter((item) => item !== improvement),
+        }
+      }
+      if (selected.length >= MAX_TOPICS_PER_AREA) {
+        return previous
+      }
+      return { ...previous, [areaId]: [...selected, improvement] }
     })
 
     setDetailsByArea((previous) => {
@@ -463,8 +488,20 @@ function App() {
     }))
   }
 
+  /** Single free-text bucket when skipping the "Other" area theme checklist */
+  const otherAreaDetailImprovement = 'Other'
+
   const goToImprovementFlow = () => {
     setCurrentAreaIndex(0)
+    const first = selectedAreaModels[0]
+    if (first?.id === 'other') {
+      setImprovementsByArea((previous) => ({
+        ...previous,
+        other: [otherAreaDetailImprovement],
+      }))
+      setStep('detail')
+      return
+    }
     setStep('improvements')
   }
 
@@ -488,11 +525,32 @@ function App() {
       return
     }
 
-    setCurrentAreaIndex((value) => value + 1)
+    const nextIndex = currentAreaIndex + 1
+    const nextArea = selectedAreaModels[nextIndex]
+    setCurrentAreaIndex(nextIndex)
+
+    if (nextArea?.id === 'other') {
+      setImprovementsByArea((previous) => ({
+        ...previous,
+        other: [otherAreaDetailImprovement],
+      }))
+      setStep('detail')
+      return
+    }
+
     setStep('improvements')
   }
 
   const handleBackDetails = () => {
+    if (currentArea?.id === 'other') {
+      if (currentAreaIndex === 0) {
+        setStep('areas')
+        return
+      }
+      setCurrentAreaIndex((value) => value - 1)
+      setStep('detail')
+      return
+    }
     setStep('improvements')
   }
 
@@ -513,30 +571,6 @@ function App() {
       detailsByArea,
       additionalFeedback,
       standaloneFeedback: undefined,
-      email:
-        canContact && email.trim().length > 0 ? email.trim() : undefined,
-      canContact,
-    })
-    setSubmissions((previous) => [submission, ...previous])
-    setIsSubmitting(false)
-    setStep('thank-you')
-  }
-
-  const handleStandaloneSubmitClick = () => {
-    if (standaloneFeedback.trim().length === 0) return
-    if (canContact && email.trim().length === 0) return
-    void handleStandaloneSubmit()
-  }
-
-  const handleStandaloneSubmit = async () => {
-    if (standaloneFeedback.trim().length === 0) return
-    setIsSubmitting(true)
-    const submission = await submitFeedback({
-      selectedAreas: [],
-      improvementsByArea: {},
-      detailsByArea: {},
-      additionalFeedback: '',
-      standaloneFeedback: standaloneFeedback.trim(),
       email:
         canContact && email.trim().length > 0 ? email.trim() : undefined,
       canContact,
@@ -586,7 +620,6 @@ function App() {
     setImprovementsByArea({})
     setDetailsByArea({})
     setAdditionalFeedback('')
-    setStandaloneFeedback('')
     setEmail('')
     setCanContact(false)
     if (
@@ -770,7 +803,7 @@ function App() {
           }`}
         >
           <div
-            key={step}
+            key={`${step}-${currentAreaIndex}`}
             className={`${
               step === 'welcome' ? '' : 'page-step-enter '
             }flex w-full min-w-0 max-w-full flex-col items-center ${
@@ -828,85 +861,69 @@ function App() {
         )}
 
         {step === 'areas' && (
-          <>
-          <div className="mx-0 flex h-full w-full min-w-0 max-w-[1152px] min-h-0 flex-col items-center justify-between gap-4 overflow-visible sm:gap-6 lg:gap-8">
-            <div className="flex h-fit min-h-0 w-full min-w-0 max-w-full flex-col items-center justify-start overflow-x-hidden">
-              <div className={stepPrimaryColumnClass}>
-                <div
-                  className={`${stepProgressBandClass} min-h-[66px]`}
-                  aria-hidden="true"
-                />
-                <div className={stepHeadlineBandClass}>
+          <div className={stepPrimaryColumnClass}>
+            <div
+              className={`${stepProgressBandClass} min-h-[66px]`}
+              aria-hidden="true"
+            />
+            <div className={stepHeadlineBandClass}>
               <h2 className="mt-0 w-full min-w-0 max-w-full shrink-0 text-balance text-center text-3xl leading-tight font-normal text-black md:text-[32px] [@media(max-height:720px)_and_(max-width:1023px)]:text-2xl [@media(max-height:720px)_and_(max-width:1023px)]:md:text-[28px]">
                 Select one or more topics to discuss
               </h2>
-              <div className="mx-auto grid w-full max-w-full auto-rows-min grid-cols-2 grid-rows-[repeat(4,auto)] content-start gap-2 overflow-x-hidden py-2 sm:gap-3 sm:py-3 [@media(max-height:720px)_and_(max-width:1023px)]:gap-2 [@media(max-height:720px)_and_(max-width:1023px)]:py-1 lg:grid-cols-4 lg:grid-rows-[repeat(2,auto)] lg:gap-4 lg:py-4 [&>button]:min-w-0">
-              {AREAS.map((area) => {
-                const isSelected = selectedAreas.includes(area.id)
+              <div className="mx-auto grid w-full max-w-full grid-cols-3 grid-rows-3 gap-2 overflow-visible py-0 sm:gap-3 [@media(max-height:720px)_and_(max-width:1023px)]:gap-2 lg:gap-4 [&>button]:min-w-0">
+                {AREAS.map((area) => {
+                  const isSelected = selectedAreas.includes(area.id)
 
-                return (
-                  <button
-                    key={area.id}
-                    type="button"
-                    onClick={() => toggleArea(area.id)}
-                    className={`relative flex h-[152px] max-h-[152px] min-h-[152px] w-full shrink-0 flex-col items-center justify-center gap-1 self-start overflow-hidden rounded-none border-0 px-2 py-2 text-left outline-none ring-offset-white transition hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 sm:px-3 sm:py-3 ${
-                      isSelected
-                        ? 'bg-white ring-2 ring-inset ring-black'
-                        : 'bg-[#eeeeee] hover:bg-[#d4d4d4]'
-                    }`}
-                  >
-                    {isSelected && (
-                      <span
-                        className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-black font-['OneStreamFono'] text-xs text-white sm:top-3 sm:right-3 sm:h-7 sm:w-7 sm:text-sm"
-                        aria-hidden="true"
-                      >
-                        {selectedAreas.indexOf(area.id) + 1}
-                      </span>
-                    )}
-                    <p className="w-full min-w-0 break-words px-1 text-center text-base font-normal text-black sm:text-lg md:text-[20px]">
-                      {area.title}
-                    </p>
-                    <p className="mt-1 w-full min-w-0 break-words px-1 text-center text-xs leading-snug text-[#575757] sm:mt-2 sm:text-sm sm:leading-5">
-                      {area.description}
-                    </p>
-                  </button>
-                )
-              })}
-              </div>
-                </div>
+                  return (
+                    <button
+                      key={area.id}
+                      type="button"
+                      onClick={() => toggleArea(area.id)}
+                      className={`relative flex min-h-[104px] w-full shrink-0 flex-col items-center justify-center gap-0.5 self-stretch overflow-visible rounded-none border-0 px-1.5 py-2 text-left outline-none ring-offset-white transition hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 sm:min-h-[120px] sm:gap-1 sm:px-2 sm:py-2.5 md:min-h-[136px] md:px-2.5 md:py-3 ${
+                        isSelected
+                          ? 'bg-white ring-2 ring-inset ring-black'
+                          : 'bg-[#eeeeee] hover:bg-[#d4d4d4]'
+                      }`}
+                    >
+                      {isSelected && (
+                        <span
+                          className="absolute top-1.5 right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black font-['OneStreamFono'] text-xs text-white sm:top-2 sm:right-2 sm:h-7 sm:w-7 sm:text-sm md:top-3 md:right-3"
+                          aria-hidden="true"
+                        >
+                          {selectedAreas.indexOf(area.id) + 1}
+                        </span>
+                      )}
+                      <p className="w-full min-w-0 break-words px-0.5 text-center text-sm font-normal leading-tight text-black sm:text-base md:text-lg">
+                        {area.title}
+                      </p>
+                      <p className="mt-0.5 w-full min-w-0 break-words px-0.5 text-center text-[10px] leading-snug text-[#575757] sm:mt-1 sm:text-xs sm:leading-5 md:text-sm">
+                        {area.description}
+                      </p>
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
-            <div className="flex w-full shrink-0 justify-center px-2 py-0">
+            <div className="flex w-full min-w-0 max-w-full shrink-0 justify-center gap-3 pt-8 sm:pt-8 [@media(max-height:720px)_and_(max-width:1023px)]:pt-4">
               <button
                 type="button"
-                onClick={() => setStep('other-feedback')}
-                className="max-w-full cursor-pointer border-0 bg-transparent px-2 text-center text-sm leading-snug font-normal text-black no-underline hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-black/30 sm:text-base"
+                onClick={goBackToWelcome}
+                disabled={welcomeOverlayBusy}
+                className={`${buttonBaseClass} w-[152px] border border-black bg-white text-black hover:bg-white hover:border-black/50 hover:text-black/50 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60`}
               >
-                Don&apos;t see your topic? Share other feedback
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={goToImprovementFlow}
+                disabled={selectedAreas.length === 0}
+                className={`${buttonBaseClass} w-[152px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
+              >
+                Next
               </button>
             </div>
           </div>
-
-          <div className="flex min-h-20 min-w-0 shrink-0 w-full self-stretch items-end justify-center gap-3 pt-4 text-left align-bottom sm:gap-3 sm:pt-6 [@media(max-height:720px)_and_(max-width:1023px)]:min-h-16 [@media(max-height:720px)_and_(max-width:1023px)]:pt-2">
-            <button
-              type="button"
-              onClick={goBackToWelcome}
-              disabled={welcomeOverlayBusy}
-              className={`${buttonBaseClass} w-[152px] border border-black bg-white text-black hover:bg-white hover:border-black/50 hover:text-black/50 focus-visible:outline-black disabled:cursor-not-allowed disabled:opacity-60`}
-            >
-              Back
-            </button>
-            <button
-              type="button"
-              onClick={goToImprovementFlow}
-              disabled={selectedAreas.length === 0}
-              className={`${buttonBaseClass} w-[152px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
-            >
-              Next
-            </button>
-          </div>
-          </>
         )}
 
         {step === 'improvements' && currentArea && (
@@ -917,54 +934,75 @@ function App() {
 
             <div className={stepHeadlineBandClass}>
               <div className="mx-auto flex w-full min-w-0 max-w-full flex-col items-stretch justify-start">
-              <h2 className="mt-0 flex w-full min-w-0 shrink-0 justify-center whitespace-nowrap text-3xl leading-tight font-normal text-black md:text-[32px] [@media(max-height:720px)_and_(max-width:1023px)]:text-2xl [@media(max-height:720px)_and_(max-width:1023px)]:md:text-[28px]">
-                <span className="shrink-0">
-                  Select all {currentArea.title.toLowerCase()} topics you&apos;d like to discuss
-                </span>
-              </h2>
-              <div className="mx-auto mt-3 w-full min-w-0 max-w-[1152px] overflow-x-hidden sm:mt-8 [@media(max-height:720px)_and_(max-width:1023px)]:mt-2">
-                <div className="flex w-full min-w-0 max-w-full flex-col justify-start gap-2 sm:gap-2 md:gap-3">
-                {currentArea.improvements.map((improvement) => {
-                  const isSelected = currentSelections.includes(improvement)
-
-                  return (
-                    <button
-                      key={improvement}
-                      type="button"
-                      onClick={() =>
-                        toggleImprovement(currentArea.id, improvement)
-                      }
-                      className={`flex min-h-[70px] w-full shrink-0 items-center justify-between gap-2 rounded-none border-2 px-3 py-4 text-left outline-none ring-offset-white transition focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 sm:gap-3 sm:px-4 ${
-                        isSelected
-                          ? 'border-black bg-white'
-                          : 'border-transparent bg-[#eeeeee] hover:bg-[#d4d4d4]'
-                      }`}
-                    >
-                      <span className="min-w-0 flex-1 break-words text-base leading-snug text-black sm:text-lg">{improvement}</span>
-                      {isSelected && (
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-black">
-                          <svg
-                            className="h-4 w-4 text-white"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                            aria-hidden="true"
-                          >
-                            <path
-                              d="M5 12.5L9.5 17L19 7.5"
-                              stroke="currentColor"
-                              strokeWidth="2.5"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
+                <div className="flex w-full min-w-0 flex-col items-center gap-4">
+                  <h2 className="mt-0 flex w-full min-w-0 shrink-0 justify-center whitespace-nowrap text-3xl leading-tight font-normal text-black md:text-[32px] [@media(max-height:720px)_and_(max-width:1023px)]:text-2xl [@media(max-height:720px)_and_(max-width:1023px)]:md:text-[28px]">
+                    <span className="shrink-0">
+                      {currentArea.improvementsStepHeading ??
+                        `Select all ${currentArea.title.toLowerCase()} topics you'd like to discuss`}
+                    </span>
+                  </h2>
+                  <p
+                    className="text-center text-[14px] font-normal tabular-nums tracking-[0.08em] text-[#575757]"
+                    aria-live="polite"
+                    aria-label={`${currentSelections.length} of ${MAX_TOPICS_PER_AREA} topics selected`}
+                  >
+                    {currentSelections.length} / {MAX_TOPICS_PER_AREA}
+                  </p>
                 </div>
-              </div>
+                <div className="mx-auto mt-3 w-full min-w-0 max-w-[1152px] overflow-visible sm:mt-8 [@media(max-height:720px)_and_(max-width:1023px)]:mt-2">
+                  <div className="flex w-full min-w-0 max-w-full flex-col justify-start gap-2 sm:gap-2 md:gap-3">
+                    {currentArea.improvements.map((improvement) => {
+                      const isSelected = currentSelections.includes(improvement)
+                      const atTopicLimit =
+                        currentSelections.length >= MAX_TOPICS_PER_AREA
+                      const selectionBlocked = atTopicLimit && !isSelected
+
+                      return (
+                        <button
+                          key={improvement}
+                          type="button"
+                          disabled={selectionBlocked}
+                          title={
+                            selectionBlocked
+                              ? 'Maximum number of topics selected'
+                              : undefined
+                          }
+                          onClick={() =>
+                            toggleImprovement(currentArea.id, improvement)
+                          }
+                          className={`flex min-h-[70px] w-full shrink-0 items-center justify-between gap-2 rounded-none border-2 px-3 py-4 text-left outline-none ring-offset-white transition focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 sm:gap-3 sm:px-4 disabled:cursor-not-allowed disabled:opacity-60 ${
+                            isSelected
+                              ? 'border-black bg-white'
+                              : 'border-transparent bg-[#eeeeee] enabled:hover:bg-[#d4d4d4]'
+                          }`}
+                        >
+                          <span className="min-w-0 flex-1 break-words text-base leading-snug text-black sm:text-lg">
+                            {improvement}
+                          </span>
+                          {isSelected && (
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-black">
+                              <svg
+                                className="h-4 w-4 text-white"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                xmlns="http://www.w3.org/2000/svg"
+                                aria-hidden="true"
+                              >
+                                <path
+                                  d="M5 12.5L9.5 17L19 7.5"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
+                              </svg>
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -997,7 +1035,8 @@ function App() {
             <div className="mx-auto flex w-full min-w-0 max-w-[768px] flex-col items-center justify-start gap-0 overflow-visible rounded-2xl px-4 py-0 sm:px-6 md:px-0">
               <div className="flex w-full min-w-0 flex-col overflow-x-hidden">
                 <h2 className="mt-0 shrink-0 text-balance text-center text-2xl font-normal text-black sm:text-3xl [@media(max-height:720px)_and_(max-width:1023px)]:text-xl [@media(max-height:720px)_and_(max-width:1023px)]:sm:text-2xl">
-                  Add details for your {currentArea.title.toLowerCase()} topics
+                  {currentArea.detailsStepHeading ??
+                    `Add details for your ${currentArea.title.toLowerCase()} topics`}
                 </h2>
                 <div className="combined-details-scroll improvements-scroll mt-4 w-full min-w-0 space-y-8 overflow-x-hidden pb-2 sm:mt-10 [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:space-y-6 [@media(max-height:720px)_and_(max-width:1023px)]:sm:mt-6">
                   {currentSelections.map((improvement, topicIndex) => (
@@ -1073,7 +1112,7 @@ function App() {
               <div className="mx-auto flex w-full min-w-0 max-w-[768px] flex-col items-center justify-start gap-0 overflow-visible rounded-2xl px-4 py-0 sm:px-6 md:px-0">
                 <div className="flex w-full min-w-0 flex-col overflow-x-hidden">
                   <h2 className="mt-0 shrink-0 text-balance text-center text-2xl font-normal text-black sm:text-3xl [@media(max-height:720px)_and_(max-width:1023px)]:text-xl [@media(max-height:720px)_and_(max-width:1023px)]:sm:text-2xl">
-                    Anything else you&apos;d like to share?
+                    Anything else you'd like to share?
                   </h2>
                   <div className="combined-details-scroll improvements-scroll mt-4 w-full min-w-0 overflow-x-hidden pb-2 sm:mt-10 [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:sm:mt-6">
                     <div className="flex w-full min-w-0 flex-col">
@@ -1170,120 +1209,6 @@ function App() {
           </div>
         )}
 
-        {step === 'other-feedback' && (
-          <div className={stepPrimaryColumnClass}>
-            <div className={stepProgressBandClass}>
-              <div
-                className="invisible pointer-events-none select-none"
-                aria-hidden="true"
-              >
-                {renderAreaProgress(true)}
-              </div>
-            </div>
-
-            <div className={stepHeadlineBandClass}>
-              <div className="mx-auto flex w-full min-w-0 max-w-[768px] flex-col items-center justify-start gap-0 overflow-visible rounded-2xl px-4 py-0 sm:px-6 md:px-0">
-                <div className="flex w-full min-w-0 flex-col overflow-x-hidden">
-                  <h2 className="mt-0 shrink-0 text-balance text-center text-2xl font-normal text-black sm:text-3xl [@media(max-height:720px)_and_(max-width:1023px)]:text-xl [@media(max-height:720px)_and_(max-width:1023px)]:sm:text-2xl">
-                    What would you like to share?
-                  </h2>
-                  <div className="combined-details-scroll improvements-scroll mt-4 w-full min-w-0 overflow-x-hidden pb-2 sm:mt-10 [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:sm:mt-6">
-                    <div className="flex w-full min-w-0 flex-col">
-                      <label
-                        htmlFor="standalone-feedback"
-                        className="text-balance text-left text-lg font-normal text-black sm:text-xl"
-                      >
-                        Additional feedback
-                      </label>
-                      <textarea
-                        id="standalone-feedback"
-                        value={standaloneFeedback}
-                        onChange={(event) =>
-                          setStandaloneFeedback(event.target.value)
-                        }
-                        rows={5}
-                        required
-                        className="mt-3 min-h-[154px] w-full min-w-0 max-w-full resize-y rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:px-5 sm:py-4"
-                        placeholder="Tell us anything that would help us better understand your experience."
-                        aria-label="Additional feedback"
-                      />
-                    </div>
-
-                    <div className="mt-8 flex w-full min-w-0 flex-col gap-6 [@media(max-height:720px)_and_(max-width:1023px)]:mt-5 [@media(max-height:720px)_and_(max-width:1023px)]:gap-4">
-                      <label className="flex cursor-pointer items-start gap-3 text-left">
-                        <input
-                          type="checkbox"
-                          checked={canContact}
-                          onChange={(event) =>
-                            setCanContact(event.target.checked)
-                          }
-                          className="mt-0.5 h-5 w-5 shrink-0 accent-black rounded border-[#cbd5e1] text-black focus:ring-black"
-                          aria-label="Yes, you can contact me"
-                        />
-                        <span className="h-full text-base leading-normal text-black">
-                          Yes, you can contact me
-                        </span>
-                      </label>
-
-                      <div className="flex w-full min-w-0 flex-col">
-                        <label
-                          htmlFor="standalone-email"
-                          className="text-balance text-left text-lg font-normal text-black sm:text-xl"
-                        >
-                          Email address
-                          {!canContact && (
-                            <span className="font-normal text-black">
-                              {' '}
-                              (optional)
-                            </span>
-                          )}
-                        </label>
-                        <input
-                          id="standalone-email"
-                          type="email"
-                          inputMode="email"
-                          autoComplete="email"
-                          value={email}
-                          onChange={(event) => setEmail(event.target.value)}
-                          placeholder="you@example.com"
-                          aria-label={
-                            canContact
-                              ? 'Email address'
-                              : 'Email address (optional)'
-                          }
-                          className="mt-3 h-12 w-full min-w-0 max-w-full rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:px-5"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="mt-4 flex shrink-0 flex-col items-center justify-center gap-3 sm:mt-8 sm:flex-row [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:sm:mt-4">
-                  <button
-                    type="button"
-                    onClick={() => setStep('areas')}
-                    className={`${buttonBaseClass} w-[152px] shrink-0 border border-black bg-white text-black hover:bg-white hover:border-black/50 hover:text-black/50 focus-visible:outline-black`}
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleStandaloneSubmitClick}
-                    disabled={
-                      isSubmitting ||
-                      standaloneFeedback.trim().length === 0 ||
-                      (canContact && email.trim().length === 0)
-                    }
-                    className={`${buttonBaseClass} w-[152px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
-                  >
-                    {isSubmitting ? 'Submitting...' : 'Submit'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {step === 'thank-you' && (
           <div className={stepPrimaryColumnClass}>
             <div className={`${stepProgressBandClass} justify-center`}>
@@ -1309,7 +1234,7 @@ function App() {
               <div className="w-full min-w-0 max-w-[672px] px-3 text-center sm:px-4">
               <h2 className="mt-0 text-balance text-4xl font-normal text-black sm:text-5xl">Thank You</h2>
               <p className="mt-4 text-balance text-lg text-[#1e293b] sm:text-xl">
-                We&apos;ve heard your voice, and it will help us plan for the
+                We've heard your voice, and it will help us plan for the
                 future.
               </p>
               <button
