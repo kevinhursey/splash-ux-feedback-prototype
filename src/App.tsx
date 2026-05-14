@@ -41,6 +41,9 @@ const WELCOME_EXPAND_MS = 600
 /** Max improvement rows a user can pick on each area’s checklist step */
 const MAX_TOPICS_PER_AREA = 3
 
+/** Free-text checklist option on every area; detail text is required when selected */
+const OTHER_IMPROVEMENT_OPTION = 'Other'
+
 /** Plain rect snapshot — avoid live DOMRect reads after layout */
 type WelcomeOverlayRect = {
   left: number
@@ -471,8 +474,24 @@ function App() {
     ? improvementsByArea[currentArea.id] ?? []
     : []
 
+  /** Detail fields follow checklist order, not click order (e.g. Other stays last). */
+  const detailImprovementsInListOrder = currentArea
+    ? currentArea.improvements.filter((improvement) =>
+        currentSelections.includes(improvement),
+      )
+    : []
+
   const isLastImprovementScreen =
     currentAreaIndex === selectedAreaModels.length - 1
+
+  const otherImprovementDetailBlocking =
+    currentArea != null &&
+    currentSelections.some(
+      (improvement) =>
+        improvement === OTHER_IMPROVEMENT_OPTION &&
+        (detailsByArea[currentArea.id]?.[improvement] ?? '').trim().length ===
+          0,
+    )
 
   const toggleArea = (areaId: string) => {
     setSelectedAreas((previous) =>
@@ -525,15 +544,13 @@ function App() {
   }
 
   /** Single free-text bucket when skipping the "Other" area theme checklist */
-  const otherAreaDetailImprovement = 'Other'
-
   const goToImprovementFlow = () => {
     setCurrentAreaIndex(0)
     const first = selectedAreaModels[0]
     if (first?.id === 'other') {
       setImprovementsByArea((previous) => ({
         ...previous,
-        other: [otherAreaDetailImprovement],
+        other: [OTHER_IMPROVEMENT_OPTION],
       }))
       setStep('detail')
       return
@@ -556,6 +573,10 @@ function App() {
   }
 
   const handleContinueDetails = () => {
+    if (otherImprovementDetailBlocking) {
+      return
+    }
+
     if (isLastImprovementScreen) {
       setStep('catch-all')
       return
@@ -568,7 +589,7 @@ function App() {
     if (nextArea?.id === 'other') {
       setImprovementsByArea((previous) => ({
         ...previous,
-        other: [otherAreaDetailImprovement],
+        other: [OTHER_IMPROVEMENT_OPTION],
       }))
       setStep('detail')
       return
@@ -1081,7 +1102,7 @@ function App() {
                     `Add details for your ${currentArea.title.toLowerCase()} topics`}
                 </h2>
                 <div className="combined-details-scroll improvements-scroll mt-4 w-full min-w-0 space-y-8 overflow-x-hidden pb-2 sm:mt-10 [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:space-y-6 [@media(max-height:720px)_and_(max-width:1023px)]:sm:mt-6">
-                  {currentSelections.map((improvement, topicIndex) => (
+                  {detailImprovementsInListOrder.map((improvement, topicIndex) => (
                     <div
                       key={improvement}
                       className="flex w-full min-w-0 flex-col"
@@ -1091,7 +1112,12 @@ function App() {
                       </h3>
                       <AutosizeDetailTextarea
                         id={`detail-${currentArea.id}-${topicIndex}`}
-                        aria-label={`Tell us more about ${improvement} (optional)`}
+                        required={improvement === OTHER_IMPROVEMENT_OPTION}
+                        aria-label={
+                          improvement === OTHER_IMPROVEMENT_OPTION
+                            ? `Tell us more about ${improvement} (required)`
+                            : `Tell us more about ${improvement} (optional)`
+                        }
                         value={
                           detailsByArea[currentArea.id]?.[improvement] ?? ''
                         }
@@ -1103,10 +1129,16 @@ function App() {
                           )
                         }
                         minHeightPx={
-                          currentSelections.length === 1 ? 200 : 60
+                          detailImprovementsInListOrder.length === 1
+                            ? 200
+                            : 60
                         }
                         className={`mt-3 w-full min-w-0 max-w-full resize-none overflow-hidden rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:mt-2 sm:px-5 sm:py-4`}
-                        placeholder="Tell us more (optional)"
+                        placeholder={
+                          improvement === OTHER_IMPROVEMENT_OPTION
+                            ? 'Tell us more (required)'
+                            : 'Tell us more (optional)'
+                        }
                       />
                     </div>
                   ))}
@@ -1124,7 +1156,7 @@ function App() {
                 <button
                   type="button"
                   onClick={handleContinueDetails}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || otherImprovementDetailBlocking}
                   className={`${buttonBaseClass} w-[152px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
                 >
                   {isLastImprovementScreen && isSubmitting
