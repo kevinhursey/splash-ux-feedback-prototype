@@ -200,7 +200,7 @@ const AREAS: Area[] = [
     description: 'Topics not captured above',
     improvementsStepHeading:
       'Choose the themes that best match what you want to share',
-    detailsStepHeading: 'Add details for the themes you selected',
+    detailsStepHeading: 'Tell us about another topic',
     improvements: [
       'Different workflow or use case',
       'Product direction or strategy',
@@ -783,12 +783,18 @@ function App() {
         } p-6 md:justify-center ${
           step === 'welcome'
             ? 'h-full min-h-0 max-h-full flex-1 justify-center overflow-x-clip overflow-y-hidden bg-[#5564ff]'
-            : 'min-h-screen justify-start overflow-x-hidden bg-white'
+            : `min-h-screen justify-start bg-white ${
+                step === 'catch-all'
+                  ? 'overflow-x-visible'
+                  : 'overflow-x-hidden'
+              }`
         }`}
       >
       <section
         ref={sectionRef}
-        className={`mx-auto flex w-full min-w-0 max-w-[1470px] flex-col items-center overflow-x-hidden rounded-[20px] bg-white px-5 sm:px-0 justify-start ${
+        className={`mx-auto flex w-full min-w-0 max-w-[1470px] flex-col items-center ${
+          step === 'catch-all' ? 'overflow-x-visible' : 'overflow-x-hidden'
+        } rounded-[20px] bg-white px-5 sm:px-0 justify-start ${
           step === 'welcome'
             ? 'min-h-0 w-full max-h-[min(100%,calc(100svh-3rem))] overflow-hidden py-0'
             : 'min-h-[calc(100dvh-3rem)] py-6'
@@ -1110,11 +1116,11 @@ function App() {
 
             <div className={stepHeadlineBandClass}>
               <div className="mx-auto flex w-full min-w-0 max-w-[768px] flex-col items-center justify-start gap-0 overflow-visible rounded-2xl px-4 py-0 sm:px-6 md:px-0">
-                <div className="flex w-full min-w-0 flex-col overflow-x-hidden">
+                <div className="flex w-full min-w-0 flex-col overflow-x-visible">
                   <h2 className="mt-0 shrink-0 text-balance text-center text-2xl font-normal text-black sm:text-3xl [@media(max-height:720px)_and_(max-width:1023px)]:text-xl [@media(max-height:720px)_and_(max-width:1023px)]:sm:text-2xl">
                     Anything else you'd like to share?
                   </h2>
-                  <div className="combined-details-scroll improvements-scroll mt-4 w-full min-w-0 overflow-x-hidden pb-2 sm:mt-10 [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:sm:mt-6">
+                  <div className="combined-details-scroll improvements-scroll mt-4 w-full min-w-0 overflow-x-visible pb-2 sm:mt-10 [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:sm:mt-6">
                     <div className="flex w-full min-w-0 flex-col">
                       <label
                         htmlFor="additional-feedback"
@@ -1135,7 +1141,7 @@ function App() {
                       />
                     </div>
 
-                    <div className="mt-8 flex w-full min-w-0 flex-col gap-6 [@media(max-height:720px)_and_(max-width:1023px)]:mt-5 [@media(max-height:720px)_and_(max-width:1023px)]:gap-4">
+                    <div className="mt-8 flex w-full min-w-0 flex-col gap-6 px-0.5 [@media(max-height:720px)_and_(max-width:1023px)]:mt-5 [@media(max-height:720px)_and_(max-width:1023px)]:gap-4">
                       <label className="flex cursor-pointer items-start gap-3 text-left">
                         <input
                           type="checkbox"
@@ -1143,7 +1149,7 @@ function App() {
                           onChange={(event) =>
                             setCanContact(event.target.checked)
                           }
-                          className="mt-0.5 h-5 w-5 shrink-0 accent-black rounded border-[#cbd5e1] text-black focus:ring-black"
+                          className="mt-0.5 h-5 w-5 shrink-0 rounded border border-[#cbd5e1] accent-black text-black outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                           aria-label="Yes, you can contact me"
                         />
                         <span className="h-full text-base leading-normal text-black">
