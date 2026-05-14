@@ -879,10 +879,10 @@ function App() {
                       key={area.id}
                       type="button"
                       onClick={() => toggleArea(area.id)}
-                      className={`relative flex min-h-[104px] w-full shrink-0 flex-col items-center justify-center gap-0.5 self-stretch overflow-visible rounded-none border-0 px-1.5 py-2 text-left outline-none ring-offset-white transition hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 sm:min-h-[120px] sm:gap-1 sm:px-2 sm:py-2.5 md:min-h-[136px] md:px-2.5 md:py-3 ${
+                      className={`relative flex min-h-[104px] w-full shrink-0 flex-col items-center justify-center gap-0.5 self-stretch overflow-visible rounded-none border-2 px-1.5 py-2 text-left outline-none ring-offset-white transition hover:-translate-y-1 focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 sm:min-h-[120px] sm:gap-1 sm:px-2 sm:py-2.5 md:min-h-[136px] md:px-2.5 md:py-3 ${
                         isSelected
-                          ? 'bg-white ring-2 ring-inset ring-black'
-                          : 'bg-[#eeeeee] hover:bg-[#d4d4d4]'
+                          ? 'border-black bg-white'
+                          : 'border-transparent bg-[#eeeeee] hover:bg-[#d4d4d4]'
                       }`}
                     >
                       {isSelected && (
