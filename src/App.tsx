@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom'
 import {
+  type ComponentProps,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -210,6 +211,41 @@ const AREAS: Area[] = [
     ],
   },
 ]
+
+type AutosizeDetailTextareaProps = Omit<
+  ComponentProps<'textarea'>,
+  'rows' | 'style'
+> & {
+  minHeightPx: number
+}
+
+function AutosizeDetailTextarea({
+  minHeightPx,
+  className = '',
+  value,
+  onChange,
+  ...rest
+}: AutosizeDetailTextareaProps) {
+  const ref = useRef<HTMLTextAreaElement>(null)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.max(minHeightPx, el.scrollHeight)}px`
+  }, [value, minHeightPx])
+
+  return (
+    <textarea
+      {...rest}
+      ref={ref}
+      rows={1}
+      value={value}
+      onChange={onChange}
+      className={className}
+    />
+  )
+}
 
 async function submitFeedback(
   payload: Omit<FeedbackSubmission, 'id' | 'submittedAt'>,
@@ -1053,7 +1089,7 @@ function App() {
                       <h3 className="text-balance text-left text-lg font-normal text-black sm:text-xl">
                         {improvement}
                       </h3>
-                      <textarea
+                      <AutosizeDetailTextarea
                         id={`detail-${currentArea.id}-${topicIndex}`}
                         aria-label={`Tell us more about ${improvement} (optional)`}
                         value={
@@ -1066,12 +1102,10 @@ function App() {
                             event.target.value,
                           )
                         }
-                        rows={4}
-                        className={`mt-3 w-full min-w-0 max-w-full resize-y rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:mt-2 sm:px-5 sm:py-4 ${
-                          currentSelections.length === 1
-                            ? 'h-[200px] min-h-[200px]'
-                            : 'h-[60px] min-h-[60px]'
-                        }`}
+                        minHeightPx={
+                          currentSelections.length === 1 ? 200 : 60
+                        }
+                        className={`mt-3 w-full min-w-0 max-w-full resize-none overflow-hidden rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:mt-2 sm:px-5 sm:py-4`}
                         placeholder="Tell us more (optional)"
                       />
                     </div>
@@ -1128,14 +1162,14 @@ function App() {
                       >
                         Additional feedback (optional)
                       </label>
-                      <textarea
+                      <AutosizeDetailTextarea
                         id="additional-feedback"
                         value={additionalFeedback}
                         onChange={(event) =>
                           setAdditionalFeedback(event.target.value)
                         }
-                        rows={5}
-                        className="mt-3 w-full min-h-[154px] min-w-0 max-w-full resize-y rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:px-5 sm:py-4"
+                        minHeightPx={154}
+                        className="mt-3 w-full min-w-0 max-w-full resize-none overflow-hidden rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:px-5 sm:py-4"
                         placeholder="Share anything else that would help our team better understand your experience."
                         aria-label="Additional feedback (optional)"
                       />
