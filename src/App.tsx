@@ -1149,6 +1149,12 @@ function App() {
                           onChange={(event) =>
                             setCanContact(event.target.checked)
                           }
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault()
+                              setCanContact((previous) => !previous)
+                            }
+                          }}
                           className="mt-0.5 h-5 w-5 shrink-0 rounded border border-[#cbd5e1] accent-black text-black outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 focus-visible:ring-offset-white"
                           aria-label="Yes, you can contact me"
                         />
