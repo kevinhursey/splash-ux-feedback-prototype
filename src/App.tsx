@@ -39,9 +39,6 @@ function getExpandOverlayViewportPx() {
 /** Welcome → areas: white card expands to full viewport (duration, ms) */
 const WELCOME_EXPAND_MS = 600
 
-/** Max improvement rows a user can pick on each area’s checklist step */
-const MAX_TOPICS_PER_AREA = 3
-
 /** Free-text checklist option on every area; detail text is required when selected */
 const OTHER_IMPROVEMENT_OPTION = 'Other'
 
@@ -486,9 +483,6 @@ function App() {
           ...previous,
           [areaId]: selected.filter((item) => item !== improvement),
         }
-      }
-      if (selected.length >= MAX_TOPICS_PER_AREA) {
-        return previous
       }
       return { ...previous, [areaId]: [...selected, improvement] }
     })
@@ -996,43 +990,25 @@ function App() {
 
             <div className={stepHeadlineBandClass}>
               <div className="mx-auto flex w-full min-w-0 max-w-full flex-col items-stretch justify-start">
-                <div className="flex w-full min-w-0 flex-col items-center gap-4">
-                  <h2 className="mt-0 flex w-full min-w-0 shrink-0 justify-center whitespace-nowrap text-3xl leading-tight font-normal text-black md:text-[32px] [@media(max-height:720px)_and_(max-width:1023px)]:text-2xl [@media(max-height:720px)_and_(max-width:1023px)]:md:text-[28px]">
-                    <span className="shrink-0">
-                      {currentArea.improvementsStepHeading ??
-                        `Select all ${currentArea.title.toLowerCase()} topics you'd like to discuss`}
-                    </span>
-                  </h2>
-                  <p
-                    className="text-center text-[14px] font-normal tabular-nums tracking-[0.08em] text-[#575757]"
-                    aria-live="polite"
-                    aria-label={`${currentSelections.length} of ${MAX_TOPICS_PER_AREA} topics selected`}
-                  >
-                    {currentSelections.length} / {MAX_TOPICS_PER_AREA}
-                  </p>
-                </div>
+                <h2 className="mt-0 flex w-full min-w-0 shrink-0 justify-center whitespace-nowrap text-3xl leading-tight font-normal text-black md:text-[32px] [@media(max-height:720px)_and_(max-width:1023px)]:text-2xl [@media(max-height:720px)_and_(max-width:1023px)]:md:text-[28px]">
+                  <span className="shrink-0">
+                    {currentArea.improvementsStepHeading ??
+                      `Select all ${currentArea.title.toLowerCase()} topics you'd like to discuss`}
+                  </span>
+                </h2>
                 <div className="mx-auto mt-3 w-full min-w-0 max-w-[1152px] overflow-visible sm:mt-8 [@media(max-height:720px)_and_(max-width:1023px)]:mt-2">
                   <div className="flex w-full min-w-0 max-w-full flex-col justify-start gap-2 sm:gap-2 md:gap-3">
                     {currentArea.improvements.map((improvement) => {
                       const isSelected = currentSelections.includes(improvement)
-                      const atTopicLimit =
-                        currentSelections.length >= MAX_TOPICS_PER_AREA
-                      const selectionBlocked = atTopicLimit && !isSelected
 
                       return (
                         <button
                           key={improvement}
                           type="button"
-                          disabled={selectionBlocked}
-                          title={
-                            selectionBlocked
-                              ? 'Maximum number of topics selected'
-                              : undefined
-                          }
                           onClick={() =>
                             toggleImprovement(currentArea.id, improvement)
                           }
-                          className={`flex min-h-[70px] w-full shrink-0 items-center justify-between gap-2 rounded-none border-2 px-3 py-4 text-left outline-none ring-offset-white transition focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 sm:gap-3 sm:px-4 disabled:cursor-not-allowed disabled:opacity-60 ${
+                          className={`flex min-h-[70px] w-full shrink-0 items-center justify-between gap-2 rounded-none border-2 px-3 py-4 text-left outline-none ring-offset-white transition focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 sm:gap-3 sm:px-4 ${
                             isSelected
                               ? 'border-black bg-white'
                               : 'border-transparent bg-[#eeeeee] enabled:hover:bg-[#d4d4d4]'
