@@ -1268,7 +1268,7 @@ function App() {
                       }
                       className={`${buttonBaseClass} w-[152px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
                     >
-                      {isSubmitting ? 'Submitting...' : 'Submit'}
+                      Submit
                     </button>
                   </div>
                 </div>
