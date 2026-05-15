@@ -462,6 +462,7 @@ function App() {
 
   const otherImprovementDetailBlocking =
     currentArea != null &&
+    currentArea.id !== 'other' &&
     currentSelections.some(
       (improvement) =>
         improvement === OTHER_IMPROVEMENT_OPTION &&
@@ -1110,9 +1111,13 @@ function App() {
                       </h3>
                       <AutosizeDetailTextarea
                         id={`detail-${currentArea.id}-${topicIndex}`}
-                        required={improvement === OTHER_IMPROVEMENT_OPTION}
+                        required={
+                          improvement === OTHER_IMPROVEMENT_OPTION &&
+                          currentArea.id !== 'other'
+                        }
                         aria-label={
-                          improvement === OTHER_IMPROVEMENT_OPTION
+                          improvement === OTHER_IMPROVEMENT_OPTION &&
+                          currentArea.id !== 'other'
                             ? `Tell us more about ${improvement} (required)`
                             : `Tell us more about ${improvement} (optional)`
                         }
@@ -1133,7 +1138,8 @@ function App() {
                         }
                         className={`mt-3 w-full min-w-0 max-w-full resize-none overflow-hidden rounded-none border border-[#cbd5e1] px-4 py-3 text-base text-black outline-none focus:border-black focus:ring-2 focus:ring-inset focus:ring-black sm:mt-2 sm:px-5 sm:py-4`}
                         placeholder={
-                          improvement === OTHER_IMPROVEMENT_OPTION
+                          improvement === OTHER_IMPROVEMENT_OPTION &&
+                          currentArea.id !== 'other'
                             ? 'Tell us more (required)'
                             : 'Tell us more (optional)'
                         }
