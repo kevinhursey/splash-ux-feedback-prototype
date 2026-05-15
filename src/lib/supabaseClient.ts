@@ -15,6 +15,16 @@ export function getSupabaseBrowserClient(): SupabaseClient | null {
   const rawUrl = String(import.meta.env.VITE_SUPABASE_URL ?? '').trim()
   const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY ?? '').trim()
   if (!rawUrl || !anonKey) {
+    if (
+      typeof window !== 'undefined' &&
+      /\.vercel\.app$/i.test(window.location.hostname)
+    ) {
+      console.warn(
+        '[Supabase] VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is empty in this build. ' +
+          'On Vercel: Project → Settings → Environment Variables → add both for Preview and Production, ' +
+          'then redeploy (Vite bakes VITE_* into the client at build time).',
+      )
+    }
     return null
   }
   const url = normalizeSupabaseUrl(rawUrl)

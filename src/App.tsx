@@ -10,7 +10,6 @@ import {
 
 import welcomeVisual from './assets/f6a77ee25998cd0c15c2b8a0d6bef7386ffd840a-5235x3490.webp'
 import { submitFeedback } from './lib/submitFeedback'
-import type { FeedbackSubmission } from './types/feedback'
 
 type Step =
   | 'welcome'
@@ -248,7 +247,6 @@ function App() {
   const [detailsByArea, setDetailsByArea] = useState<
     Record<string, Record<string, string>>
   >({})
-  const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submissionError, setSubmissionError] = useState<string | null>(null)
   const [additionalFeedback, setAdditionalFeedback] = useState('')
@@ -610,7 +608,7 @@ function App() {
         id: a.id,
         title: a.title,
       }))
-      const submission = await submitFeedback(
+      await submitFeedback(
         {
           selectedAreas,
           improvementsByArea,
@@ -623,7 +621,6 @@ function App() {
         },
         areaTitlesInOrder,
       )
-      setSubmissions((previous) => [submission, ...previous])
       setStep('thank-you')
     } catch (err) {
       console.error(err)
@@ -1334,9 +1331,6 @@ function App() {
               >
                 RETURN TO START
               </button>
-              <p className="mt-6 text-sm text-[#475569]">
-                Local submissions captured: {submissions.length}
-              </p>
             </div>
             </div>
           </div>
