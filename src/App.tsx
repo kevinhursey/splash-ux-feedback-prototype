@@ -9,6 +9,8 @@ import {
 } from 'react'
 
 import welcomeVisual from './assets/f6a77ee25998cd0c15c2b8a0d6bef7386ffd840a-5235x3490.webp'
+import { submitFeedback } from './lib/submitFeedback'
+import type { FeedbackSubmission } from './types/feedback'
 
 type Step =
   | 'welcome'
@@ -79,20 +81,6 @@ type Area = {
   improvementsStepHeading?: string
   /** When set, used on the detail step instead of “Add details for your … topics” */
   detailsStepHeading?: string
-}
-
-type FeedbackSubmission = {
-  id: string
-  submittedAt: string
-  selectedAreas: string[]
-  improvementsByArea: Record<string, string[]>
-  detailsByArea: Record<string, Record<string, string>>
-  /** Final-step textarea after category-based topic details */
-  additionalFeedback: string
-  /** Reserved for integrations; main UI routes all feedback through areas */
-  standaloneFeedback?: string
-  email?: string
-  canContact: boolean
 }
 
 const AREAS: Area[] = [
@@ -250,17 +238,6 @@ function AutosizeDetailTextarea({
   )
 }
 
-async function submitFeedback(
-  payload: Omit<FeedbackSubmission, 'id' | 'submittedAt'>,
-): Promise<FeedbackSubmission> {
-  // Placeholder adapter for future integrations (Supabase/Firebase/Airtable/API).
-  return Promise.resolve({
-    id: crypto.randomUUID(),
-    submittedAt: new Date().toISOString(),
-    ...payload,
-  })
-}
-
 function App() {
   const [step, setStep] = useState<Step>('welcome')
   const [selectedAreas, setSelectedAreas] = useState<string[]>([])
@@ -273,6 +250,7 @@ function App() {
   >({})
   const [submissions, setSubmissions] = useState<FeedbackSubmission[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submissionError, setSubmissionError] = useState<string | null>(null)
   const [additionalFeedback, setAdditionalFeedback] = useState('')
   const [email, setEmail] = useState('')
   const [canContact, setCanContact] = useState(false)
@@ -612,29 +590,51 @@ function App() {
   }
 
   const handleBackCatchAll = () => {
+    setSubmissionError(null)
     setStep('detail')
   }
 
   const handleSubmitClick = () => {
+    if (isSubmitting) return
     if (canContact && email.trim().length === 0) return
     void handleSubmit()
   }
 
   const handleSubmit = async () => {
+    if (isSubmitting) return
+    if (canContact && email.trim().length === 0) return
+    setSubmissionError(null)
     setIsSubmitting(true)
-    const submission = await submitFeedback({
-      selectedAreas,
-      improvementsByArea,
-      detailsByArea,
-      additionalFeedback,
-      standaloneFeedback: undefined,
-      email:
-        canContact && email.trim().length > 0 ? email.trim() : undefined,
-      canContact,
-    })
-    setSubmissions((previous) => [submission, ...previous])
-    setIsSubmitting(false)
-    setStep('thank-you')
+    try {
+      const areaTitlesInOrder = selectedAreaModels.map((a) => ({
+        id: a.id,
+        title: a.title,
+      }))
+      const submission = await submitFeedback(
+        {
+          selectedAreas,
+          improvementsByArea,
+          detailsByArea,
+          additionalFeedback,
+          standaloneFeedback: undefined,
+          email:
+            canContact && email.trim().length > 0 ? email.trim() : undefined,
+          canContact,
+        },
+        areaTitlesInOrder,
+      )
+      setSubmissions((previous) => [submission, ...previous])
+      setStep('thank-you')
+    } catch (err) {
+      console.error(err)
+      setSubmissionError(
+        err instanceof Error
+          ? err.message
+          : 'We could not save your feedback. Please try again in a moment.',
+      )
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleGetStarted = () => {
@@ -679,6 +679,7 @@ function App() {
     setAdditionalFeedback('')
     setEmail('')
     setCanContact(false)
+    setSubmissionError(null)
     if (
       typeof window !== 'undefined' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -1262,25 +1263,35 @@ function App() {
                   </div>
                 </div>
 
-                <div className="mt-4 flex shrink-0 flex-col items-center justify-center gap-3 sm:mt-8 sm:flex-row [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:sm:mt-4">
-                  <button
-                    type="button"
-                    onClick={handleBackCatchAll}
-                    className={`${buttonBaseClass} w-[152px] shrink-0 border border-black bg-white text-black hover:bg-white hover:border-black/50 hover:text-black/50 focus-visible:outline-black`}
-                  >
-                    Back
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleSubmitClick}
-                    disabled={
-                      isSubmitting ||
-                      (canContact && email.trim().length === 0)
-                    }
-                    className={`${buttonBaseClass} w-[152px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
-                  >
-                    {isSubmitting ? 'Submitting...' : 'Submit'}
-                  </button>
+                <div className="mt-4 flex w-full min-w-0 flex-col items-center justify-center gap-3 sm:mt-8 [@media(max-height:720px)_and_(max-width:1023px)]:mt-3 [@media(max-height:720px)_and_(max-width:1023px)]:sm:mt-4">
+                  {submissionError ? (
+                    <p
+                      className="w-full max-w-md text-center text-sm text-[#b91c1c]"
+                      role="alert"
+                    >
+                      {submissionError}
+                    </p>
+                  ) : null}
+                  <div className="flex shrink-0 flex-col items-center justify-center gap-3 sm:flex-row">
+                    <button
+                      type="button"
+                      onClick={handleBackCatchAll}
+                      className={`${buttonBaseClass} w-[152px] shrink-0 border border-black bg-white text-black hover:bg-white hover:border-black/50 hover:text-black/50 focus-visible:outline-black`}
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSubmitClick}
+                      disabled={
+                        isSubmitting ||
+                        (canContact && email.trim().length === 0)
+                      }
+                      className={`${buttonBaseClass} w-[152px] bg-black text-white enabled:hover:bg-black/75 focus-visible:outline-black disabled:cursor-not-allowed disabled:bg-black/50`}
+                    >
+                      {isSubmitting ? 'Submitting...' : 'Submit'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
